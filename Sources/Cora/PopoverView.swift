@@ -261,7 +261,7 @@ struct ThreadRow: View {
                 Spacer(minLength: 4)
                 if let at = entry.thread.lastAt { Text(Format.ago(at)).font(.system(size: 10)).foregroundStyle(.secondary) }
             }
-            Text(entry.agents.map(\.name).joined(separator: ", ") + " · " + Format.tokens(entry.thread.tokensIn + entry.thread.tokensOut) + " token")
+            Text(([entry.agents.map(\.name).joined(separator: ", ")] + (tokens > 0 ? [Format.tokens(tokens) + " token"] : [])).joined(separator: " · "))
                 .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             if !entry.thread.reasoning.isEmpty {
                 Text(entry.thread.reasoning.replacingOccurrences(of: "\n", with: " ")).font(.system(size: 11)).italic().foregroundStyle(.secondary).lineLimit(2)
@@ -274,4 +274,5 @@ struct ThreadRow: View {
     }
 
     var active: Bool { entry.thread.status == "active" }
+    var tokens: Int { entry.thread.tokensIn + entry.thread.tokensOut }
 }
