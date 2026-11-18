@@ -29,30 +29,56 @@ public enum Storage {
         return "space.usecora.app"
     }
 
-    static var connectionFile: URL { home.appendingPathComponent("connection.json") }
-    public static var pendingStateFile: URL { home.appendingPathComponent("pending-state") }
+    static var connectionsFile: URL { home.appendingPathComponent("connections.json") }
+    /// Where versions up to 0.2.10 kept their single space; read once and moved into `connections.json`.
+    static var legacyConnectionFile: URL { home.appendingPathComponent("connection.json") }
 
-    public static func loadConnection() -> Connection? {
-        guard let data = try? Data(contentsOf: connectionFile) else { return nil }
+    /// Every space this Mac reads, in the order they were connected.
+    public static func loadConnections() -> [Connection] {
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(Connection.self, from: data)
+        if let data = try? Data(contentsOf: connectionsFile), let list = try? decoder.decode([Connection].self, from: data) { return list }
+        guard let data = try? Data(contentsOf: legacyConnectionFile), let single = try? decoder.decode(Connection.self, from: data) else { return [] }
+        if (try? write([single])) != nil { try? FileManager.default.removeItem(at: legacyConnectionFile) }
+        return [single]
     }
 
+    /// The first space, for the command line.
+    public static func loadConnection() -> Connection? { loadConnections().first }
+
+    public static func connection(server: URL) -> Connection? { loadConnections().first { $0.server == server } }
+
+    /// Adds the space, or replaces the one with the same server, keeping its place.
     public static func save(_ connection: Connection, token: String) throws {
         try Keychain.write(token, service: keychainService, account: connection.server.absoluteString)
+        var list = loadConnections()
+        if let index = list.firstIndex(where: { $0.server == connection.server }) { list[index] = connection } else { list.append(connection) }
+        try write(list)
+    }
+
+    /// Keeps a name the server changed, without touching the token.
+    public static func update(_ connection: Connection) {
+        var list = loadConnections()
+        guard let index = list.firstIndex(where: { $0.server == connection.server }), list[index] != connection else { return }
+        list[index] = connection
+        try? write(list)
+    }
+
+    static func write(_ list: [Connection]) throws {
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601; encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(connection).write(to: connectionFile, options: .atomic)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: connectionFile.path)
+        try encoder.encode(list).write(to: connectionsFile, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: connectionsFile.path)
     }
 
     public static func token(for connection: Connection) -> String? {
         try? Keychain.read(service: keychainService, account: connection.server.absoluteString)
     }
 
+    /// Forgets one space: its token and its line; the other spaces stay.
     public static func forget(_ connection: Connection) {
         Keychain.delete(service: keychainService, account: connection.server.absoluteString)
-        try? FileManager.default.removeItem(at: connectionFile)
+        let list = loadConnections().filter { $0.server != connection.server }
+        try? write(list)
     }
 
     /// The state this Mac sent to the panel, so a link it did not ask for is recognized as such.

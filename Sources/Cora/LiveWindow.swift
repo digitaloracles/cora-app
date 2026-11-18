@@ -15,10 +15,18 @@ final class LiveSelection: ObservableObject {
 struct LiveWindow: View {
     @ObservedObject var store: SpaceStore
     @ObservedObject var selection: LiveSelection
+    /// With more than one space, a picker on top of the sidebar.
+    var spaces: Spaces? = nil
 
     var body: some View {
         NavigationSplitView {
             List(selection: $selection.agentId) {
+                if let spaces, spaces.stores.count > 1 {
+                    Picker(selection: Binding(get: { spaces.stores.firstIndex { $0 === spaces.current } ?? 0 }, set: { spaces.select(spaces.stores[$0]) })) {
+                        ForEach(Array(spaces.stores.enumerated()), id: \.offset) { index, space in Text(space.title).tag(index) }
+                    } label: { EmptyView() }
+                    .labelsHidden().pickerStyle(.menu).padding(.bottom, 4)
+                }
                 Label("Tokens", systemImage: "gauge.with.dots.needle.33percent").font(.system(size: 13, weight: .medium))
                     .tag(LiveSelection.tokens)
                 Section("Agents") {
@@ -46,6 +54,24 @@ struct LiveWindow: View {
         }
         .frame(minWidth: 640, minHeight: 480)
         .onChange(of: selection.agentId) { _, _ in selection.thread = nil; selection.threadDetail = nil }
+    }
+}
+
+/// The window of the space on screen; switching space starts on its Tokens page.
+struct SpacesWindow: View {
+    @ObservedObject var spaces: Spaces
+    @ObservedObject var selection: LiveSelection
+    var title: (String) -> Void = { _ in }
+
+    var body: some View {
+        LiveWindow(store: spaces.current, selection: selection, spaces: spaces)
+            .id(ObjectIdentifier(spaces.current))
+            .onAppear { title(spaces.current.title) }
+            .onChange(of: ObjectIdentifier(spaces.current)) { _, _ in
+                selection.agentId = LiveSelection.tokens
+                title(spaces.current.title)
+            }
+            .onChange(of: spaces.current.title) { _, name in title(name) }
     }
 }
 

@@ -159,6 +159,18 @@ enum CLI {
                              to: folder.appendingPathComponent("tokens-page-\(Int(width))-\(name).png"))
             }
             selection.agentId = agent
+            var other = store.snapshot!
+            other.space = .init(name: "Dopamina", origin: "https://dopamina.usecora.space")
+            other.agents = Array(other.agents.prefix(2))
+            let spaces = Spaces(stores: [store, SpaceStore(preview: other)])
+            try snapshot(PopoverView(store: store, spaces: spaces, tab: .agents).environment(\.isStaticPreview, true), width: 360, height: nil, appearance: appearance,
+                         to: folder.appendingPathComponent("popover-spaces-\(name).png"))
+            selection.agentId = LiveSelection.tokens
+            try snapshot(LiveWindow(store: store, selection: selection, spaces: spaces), width: 1000, height: 700, appearance: appearance, to: folder.appendingPathComponent("window-spaces-\(name).png"))
+            spaces.beginAdding()
+            try snapshot(PopoverView(store: spaces.current, spaces: spaces, tab: .agents).environment(\.isStaticPreview, true), width: 360, height: nil, appearance: appearance,
+                         to: folder.appendingPathComponent("popover-spaces-adding-\(name).png"))
+            selection.agentId = agent
         }
         Swift.print("Rendered into \(folder.path)")
     }

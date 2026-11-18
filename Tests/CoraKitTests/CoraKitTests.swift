@@ -199,6 +199,28 @@ import Testing
         #expect(snapshot.pinned(["a"]).map(\.title) == ["Claude"], "the menu bar adds the label only when two pinned ones share a provider")
     }
 
+    @Test func spacesAreAListAndTheOldSingleSpaceMovesIn() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("cora-spaces-\(UUID().uuidString)")
+        setenv("CORA_APP_HOME", home.path, 1)
+        defer { unsetenv("CORA_APP_HOME"); try? FileManager.default.removeItem(at: home) }
+        #expect(Storage.loadConnections().isEmpty)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        let notseb = Connection(server: URL(string: "https://notseb.usecora.space")!, spaceName: "notseb", userName: "Seb", email: "s@x.it", deviceId: "dev_1")
+        try encoder.encode(notseb).write(to: home.appendingPathComponent("connection.json"))
+        #expect(Storage.loadConnections().map(\.server) == [notseb.server], "the space of an older version is kept")
+        #expect(!FileManager.default.fileExists(atPath: home.appendingPathComponent("connection.json").path))
+        let dopamina = Connection(server: URL(string: "https://dopamina.usecora.space")!, spaceName: "Dopamina", userName: "Seb", email: "s@x.it", deviceId: "dev_2")
+        try Storage.write([notseb, dopamina])
+        var renamed = notseb; renamed.spaceName = "notseb world"
+        Storage.update(renamed)
+        #expect(Storage.loadConnections().map(\.spaceName) == ["notseb world", "Dopamina"])
+        #expect(Storage.connection(server: dopamina.server)?.deviceId == "dev_2")
+        Storage.forget(notseb)
+        #expect(Storage.loadConnections().map(\.server) == [dopamina.server], "forgetting one space keeps the others")
+        #expect(Storage.loadConnection()?.server == dopamina.server)
+    }
+
     @Test func pinsPersistPerSpace() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("cora-pins-\(UUID().uuidString)")
         setenv("CORA_APP_HOME", home.path, 1)

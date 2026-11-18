@@ -19,6 +19,8 @@ enum PopoverTab: String, CaseIterable, Identifiable {
 /// the latest reasoning of each thread. The popover is as tall as the tab's content and scrolls only past the screen.
 struct PopoverView: View {
     @ObservedObject var store: SpaceStore
+    /// The other spaces of this Mac: the switcher under the header, and "Add another space" in the menu.
+    var spaces: Spaces? = nil
     var openAgent: (String?) -> Void = { _ in }
     @State var tab: PopoverTab = .agents
     @State var threadQuery = ""
@@ -28,6 +30,9 @@ struct PopoverView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if let spaces, spaces.stores.count > 1 || spaces.adding != nil {
+                SpaceSwitcher(spaces: spaces).padding(.horizontal, 10).padding(.bottom, 10)
+            }
             Divider()
             if let snapshot = store.snapshot {
                 Picker("", selection: $tab) {
@@ -49,7 +54,7 @@ struct PopoverView: View {
                     .padding(10)
                 }
             } else {
-                ConnectPanel(store: store).padding(16)
+                ConnectPanel(store: store, cancel: spaces?.adding === store ? { spaces?.cancelAdding() } : nil).padding(16)
             }
         }
         .frame(width: 360)
@@ -133,7 +138,11 @@ struct PopoverView: View {
                 if let connection = store.connection {
                     Text("Signed in as \(connection.userName)")
                     Button(String(localized: "Open the panel")) { NSWorkspace.shared.open(connection.server) }
-                    Button(String(localized: "Disconnect this Mac")) { Task { await store.disconnect() } }
+                    Button(String(localized: "Disconnect this Mac from \(connection.host)")) { Task { await store.disconnect() } }
+                    Divider()
+                }
+                if let spaces, !spaces.stores.isEmpty, spaces.adding == nil {
+                    Button(String(localized: "Add another space…")) { spaces.beginAdding() }
                     Divider()
                 }
                 Button(String(localized: "Quit Cora")) { NSApp.terminate(nil) }
@@ -198,10 +207,12 @@ struct AgentRow: View {
 /// Before a space is connected: the address, then the panel authorizes this Mac.
 struct ConnectPanel: View {
     @ObservedObject var store: SpaceStore
+    /// Set while adding one more space: goes back to the spaces already connected.
+    var cancel: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Connect your space").font(.system(size: 13, weight: .semibold))
+            Text(cancel == nil ? "Connect your space" : "Add another space").font(.system(size: 13, weight: .semibold))
             Text("The panel opens in your browser. Sign in there and authorize this Mac: Cora comes back here on its own.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             TextField(String(localized: "Space address"), text: $store.spaceInput)
@@ -209,6 +220,7 @@ struct ConnectPanel: View {
                 .onSubmit { store.authorize() }
             HStack {
                 Button(String(localized: "Connect")) { store.authorize() }.buttonStyle(.borderedProminent).controlSize(.small)
+                if let cancel { Button(String(localized: "Cancel"), action: cancel).controlSize(.small) }
                 switch store.phase {
                 case .waitingForPanel(let host):
                     ProgressView().controlSize(.small)
@@ -333,4 +345,50 @@ struct ThreadRow: View {
 private struct ContentHeight: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// The popover of the space on screen; it follows the switcher.
+struct SpacesPopover: View {
+    @ObservedObject var spaces: Spaces
+    var openAgent: (String?) -> Void = { _ in }
+
+    var body: some View {
+        PopoverView(store: spaces.current, spaces: spaces, openAgent: openAgent).id(ObjectIdentifier(spaces.current))
+    }
+}
+
+/// One chip per space, with how many agents work there now; the last one adds a space.
+struct SpaceSwitcher: View {
+    @ObservedObject var spaces: Spaces
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(Array(spaces.stores.enumerated()), id: \.offset) { chip($0.element) }
+                if let adding = spaces.adding { chip(adding) }
+                else {
+                    Button { spaces.beginAdding() } label: { Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).frame(width: 22, height: 22) }
+                        .buttonStyle(.plain).background(Capsule().strokeBorder(Color.primary.opacity(0.15)))
+                        .help(String(localized: "Add another space…"))
+                }
+            }
+        }
+    }
+
+    func chip(_ store: SpaceStore) -> some View {
+        let selected = spaces.current === store
+        let working = store.snapshot?.working.count ?? 0
+        return Button { spaces.select(store) } label: {
+            HStack(spacing: 5) {
+                Circle().fill(store.phase == .ready ? (working > 0 ? HeatPalette.amber : Color.green) : Color.orange).frame(width: 6, height: 6)
+                Text(store.title).font(.system(size: 11, weight: selected ? .semibold : .regular)).lineLimit(1)
+                if working > 0 { Text("\(working)").font(.system(size: 10, weight: .semibold)).monospacedDigit().foregroundStyle(.secondary) }
+            }
+            .padding(.horizontal, 9).frame(height: 22)
+            .background(Capsule().fill(Color.primary.opacity(selected ? 0.12 : 0.04)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(store.connection?.host ?? "")
+    }
 }

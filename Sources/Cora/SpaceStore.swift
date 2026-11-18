@@ -28,6 +28,15 @@ final class SpaceStore: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var pendingRefresh: Task<Void, Never>?
     private let maxSteps = 300
+    /// Told when this Mac is paired with a space, and when the person disconnects it, so the list of spaces follows.
+    var onConnected: (SpaceStore) -> Void = { _ in }
+    var onDisconnected: (SpaceStore) -> Void = { _ in }
+
+    /// One space of the list, read from the Keychain on `start`.
+    init(connection: Connection) {
+        self.connection = connection
+        spaceInput = connection.host
+    }
 
     init(preview: Snapshot? = nil, pins: [String] = [], history: UsageHistory? = nil) {
         self.pins = pins
@@ -40,12 +49,12 @@ final class SpaceStore: ObservableObject {
     }
 
     func start() {
-        guard let connection = Storage.loadConnection() else { phase = .disconnected; return }
+        guard let connection else { phase = .disconnected; return }
         guard let token = Storage.token(for: connection) else {
             // A Keychain that is not readable yet (wake, first unlock) keeps the pairing and tries again later.
             self.connection = connection
             phase = .failed(String(localized: "The Keychain is locked: unlock your Mac to read this space."))
-            Task { try? await Task.sleep(nanoseconds: 30_000_000_000); if self.client == nil { self.start() } }
+            Task { try? await Task.sleep(nanoseconds: 30_000_000_000); if self.client == nil, self.connection != nil { self.start() } }
             return
         }
         attach(connection, token: token)
@@ -110,6 +119,7 @@ final class SpaceStore: ObservableObject {
             snapshot = nil
             steps = [:]; traces = [:]
             attach(connection, token: paired.token)
+            onConnected(self)
         } catch {
             phase = .failed(error.localizedDescription)
         }
@@ -122,7 +132,17 @@ final class SpaceStore: ObservableObject {
         client = nil; connection = nil; snapshot = nil; steps = [:]; traces = [:]; streamOnline = false
         history = nil; historyReadAt = nil
         phase = .disconnected
+        onDisconnected(self)
     }
+
+    /// Stops reading the space, as when it leaves the list.
+    func stop() {
+        streamTask?.cancel(); pollTask?.cancel(); pendingRefresh?.cancel()
+        client = nil; streamOnline = false
+    }
+
+    /// The space's name, as the switchers show it.
+    var title: String { snapshot?.space.name ?? connection?.spaceName ?? connection?.host ?? String(localized: "New space") }
 
     func refresh() async {
         guard let client else { return }
@@ -135,6 +155,7 @@ final class SpaceStore: ObservableObject {
             if var connection, connection.spaceName != fresh.space.name || connection.userName != fresh.user.name {
                 connection.spaceName = fresh.space.name; connection.userName = fresh.user.name
                 self.connection = connection
+                Storage.update(connection)
             }
         } catch ClientError.unauthorized(let message) {
             revoked(message)
