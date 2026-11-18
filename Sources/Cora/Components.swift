@@ -357,7 +357,6 @@ enum MenuBarTitle {
     @MainActor static func parts(_ store: SpaceStore) -> [Part] {
         guard let snapshot = store.snapshot else { return [] }
         var parts: [Part] = []
-        if !snapshot.working.isEmpty { parts.append(Part(text: "\(snapshot.working.count)", level: nil, provider: nil, title: "")) }
         parts += snapshot.pinned(store.pins).map { Part(text: $0.value, level: $0.window?.level, provider: $0.provider, title: $0.title) }
         return parts
     }
@@ -422,9 +421,30 @@ struct MenuBarButton: NSViewRepresentable {
     }
 
     func updateNSView(_ button: NSButton, context: Context) {
-        let symbol = NSImage(systemSymbolName: working ? "person.2.wave.2.fill" : "person.2.wave.2", accessibilityDescription: "Cora")
-        symbol?.isTemplate = true
-        button.image = symbol
+        button.image = CoraMark.image(working: working)
         button.attributedTitle = title
+    }
+}
+
+/// The Cora mark for the menu bar: the app icon's sphere as a template image; a dot when agents are working.
+enum CoraMark {
+    static func image(working: Bool) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+            NSColor.black.set()
+            let ring = NSBezierPath(ovalIn: NSRect(x: 2.25, y: 2.25, width: 13.5, height: 13.5))
+            ring.lineWidth = 1.5
+            ring.stroke()
+            let seam = NSBezierPath()
+            seam.move(to: NSPoint(x: 2.6, y: 10.4))
+            seam.curve(to: NSPoint(x: 14.6, y: 5.0), controlPoint1: NSPoint(x: 6.5, y: 13.2), controlPoint2: NSPoint(x: 11.5, y: 10.6))
+            seam.lineWidth = 1.5
+            seam.lineCapStyle = .round
+            seam.stroke()
+            if working { NSBezierPath(ovalIn: NSRect(x: 13.0, y: 0.5, width: 4.5, height: 4.5)).fill() }
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Cora"
+        return image
     }
 }

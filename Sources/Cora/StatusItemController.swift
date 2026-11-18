@@ -3,7 +3,7 @@ import Combine
 import CoraKit
 import SwiftUI
 
-/// The menu bar: how many agents are working and the subscriptions the person pinned; the popover opens on click.
+/// The menu bar: the Cora mark (with a dot while agents work) and the subscriptions the person pinned; the popover opens on click.
 @MainActor
 final class StatusItemController: NSObject {
     let store: SpaceStore
@@ -37,9 +37,7 @@ final class StatusItemController: NSObject {
     func draw() {
         guard let button = item.button else { return }
         let working = store.snapshot?.working.count ?? 0
-        let symbol = NSImage(systemSymbolName: working > 0 ? "person.2.wave.2.fill" : "person.2.wave.2", accessibilityDescription: "Cora")
-        symbol?.isTemplate = true
-        button.image = symbol
+        button.image = CoraMark.image(working: working > 0)
         button.imagePosition = .imageLeading
         let parts = MenuBarTitle.parts(store)
         button.attributedTitle = MenuBarTitle.attributed(parts)
