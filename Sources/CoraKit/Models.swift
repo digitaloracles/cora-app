@@ -148,6 +148,17 @@ public struct Account: Decodable, Sendable, Identifiable, Hashable {
         (usage?.windows ?? []).filter { $0.group.isEmpty }.max { $0.usedPercent < $1.usedPercent }
     }
 
+    /// The account-wide windows the row shows, shortest first: the 5-hour session above the week or the month.
+    /// Two at most; every window, model-scoped ones included, is in the expanded view.
+    public var mainWindows: [QuotaWindow] {
+        Array((usage?.windows ?? []).filter { $0.group.isEmpty }.sorted { $0.span < $1.span }.prefix(2))
+    }
+
+    /// Every window, account-wide ones first, each group by length.
+    public var allWindows: [QuotaWindow] {
+        (usage?.windows ?? []).sorted { ($0.group.isEmpty ? 0 : 1, $0.group, $0.span) < ($1.group.isEmpty ? 0 : 1, $1.group, $1.span) }
+    }
+
     /// What is left on a pay-as-you-go account (DeepSeek): the total balance, or the first one the provider reports.
     /// Nothing when the account must sign in again: the last balance would no longer be true.
     public var balance: Balance? {
@@ -208,6 +219,31 @@ public struct QuotaWindow: Decodable, Sendable, Hashable, Identifiable {
     }
 
     public var remainingPercent: Double { max(0, 100 - usedPercent) }
+
+    /// How long the window lasts, in minutes, to put the shorter one first.
+    public var span: Int {
+        if let minutes, minutes > 0 { return minutes }
+        switch kind {
+        case .session: return 300
+        case .weekly: return 10_080
+        case .monthly: return 43_200
+        case .custom: return Int.max
+        }
+    }
+
+    /// The window's length as a short tag next to its figures: `5h`, `24h`, `7d`, `30d` (`7g` in Italian).
+    public func tag(italian: Bool = Format.italian) -> String {
+        let day = italian ? "g" : "d"
+        switch kind {
+        case .weekly where minutes == nil: return "7\(day)"
+        case .monthly where minutes == nil: return "30\(day)"
+        default:
+            let length = span
+            if length == Int.max { return "–" }
+            if length <= 2_880 { return "\(max(1, length / 60))h" }
+            return "\(length / 1_440)\(day)"
+        }
+    }
     public var level: Level { remainingPercent <= 5 ? .critical : remainingPercent <= 20 ? .warning : .normal }
 
     public enum Level: Sendable { case normal, warning, critical }

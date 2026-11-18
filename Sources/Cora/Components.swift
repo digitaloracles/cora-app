@@ -120,52 +120,81 @@ extension QuotaWindow {
     }
 }
 
-/// One subscription on one line: provider mark and name, when its tightest window resets, what is left (or the balance
-/// of a pay-as-you-go account), the pin.
+/// One subscription: provider mark and name, then its account-wide windows, one line each with its length (`5h`, `7d`),
+/// reset countdown, what is left and the percent; the shorter window on the name's line, the longer one under it. A
+/// pay-as-you-go account shows its balance. The mark stays one line tall. A click opens every limit, balance and
+/// detail of the subscription.
 struct SubscriptionRow: View {
     let account: Account
     let title: String
     var pinned = false
+    var expanded = false
+    var agents: [String] = []
     var onPin: (() -> Void)?
+    var onToggle: (() -> Void)?
+
+    static let lineHeight: CGFloat = 18
 
     var body: some View {
-        HStack(spacing: 8) {
-            ProviderMark(provider: account.provider, size: 14)
-            Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.tail)
-            Spacer(minLength: 6)
-            if let window = account.tightestWindow {
-                if let reset = window.resetsAt {
-                    Text(Format.countdown(to: reset)).font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
-                        .help("\(window.label) · " + String(localized: "Resets in \(Format.countdown(to: reset))") + " · " + reset.formatted(date: .abbreviated, time: .shortened))
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 8) {
+                ProviderMark(provider: account.provider, size: 14).frame(height: Self.lineHeight)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 5) {
+                        Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.tail)
+                        Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold)).foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                        Spacer(minLength: 6)
+                        firstLine
+                    }
+                    .frame(height: Self.lineHeight)
+                    if windows.count > 1 {
+                        HStack(spacing: 0) { Spacer(minLength: 0); WindowFigures(window: windows[1]) }.frame(height: Self.lineHeight - 2)
+                    }
                 }
-                LeftBar(remainingPercent: window.remainingPercent, color: window.level.color).frame(width: 56)
-                Text(Format.percent(window.remainingPercent)).font(.system(size: 12, weight: .semibold)).monospacedDigit()
-                    .foregroundStyle(window.level == .normal ? Color.primary : window.level.color)
-                    .frame(width: 36, alignment: .trailing)
-            } else if let balance = account.balance {
-                Text("Balance").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                Text(balance.text).font(.system(size: 12, weight: .semibold)).monospacedDigit().lineLimit(1)
-                    .foregroundStyle(balance.isEmpty ? QuotaWindow.Level.critical.color : Color.primary)
-                    .help(String(localized: "Pay-as-you-go: what is left on the account"))
-            } else {
-                Text(issue).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                Text("–").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary).frame(width: 36, alignment: .trailing)
+                pin.frame(height: Self.lineHeight)
             }
-            if let onPin {
-                Button(action: onPin) {
-                    Image(systemName: pinned ? "pin.fill" : "pin")
-                        .font(.system(size: 11))
-                        .foregroundStyle(pinned ? Color.accentColor : Color.secondary.opacity(0.7))
-                        .frame(width: 20, height: 20)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(pinned ? String(localized: "Remove from the menu bar") : String(localized: "Show this subscription in the menu bar"))
-                .accessibilityLabel(Text(pinned ? "Remove from the menu bar" : "Show this subscription in the menu bar"))
+            if expanded {
+                SubscriptionDetail(account: account, agents: agents).padding(.leading, 22).padding(.trailing, 4).padding(.top, 6).padding(.bottom, 2)
             }
         }
-        .opacity(account.usage?.stale == true ? 0.6 : 1)
+        .opacity(account.usage?.stale == true && !expanded ? 0.6 : 1)
         .padding(.leading, 8).padding(.trailing, 4).padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { onToggle?() } }
+        .help(expanded ? String(localized: "Hide the details") : String(localized: "Show every limit of this subscription"))
+        .accessibilityAddTraits(.isButton)
+    }
+
+    var windows: [QuotaWindow] { account.mainWindows }
+
+    @ViewBuilder var firstLine: some View {
+        if let window = windows.first {
+            WindowFigures(window: window)
+        } else if let balance = account.balance {
+            Text("Balance").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            Text(balance.text).font(.system(size: 12, weight: .semibold)).monospacedDigit().lineLimit(1)
+                .foregroundStyle(balance.isEmpty ? QuotaWindow.Level.critical.color : Color.primary)
+                .help(String(localized: "Pay-as-you-go: what is left on the account"))
+        } else {
+            Text(issue).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            Text("–").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary).frame(width: 34, alignment: .trailing)
+        }
+    }
+
+    @ViewBuilder var pin: some View {
+        if let onPin {
+            Button(action: onPin) {
+                Image(systemName: pinned ? "pin.fill" : "pin")
+                    .font(.system(size: 11))
+                    .foregroundStyle(pinned ? Color.accentColor : Color.secondary.opacity(0.7))
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(pinned ? String(localized: "Remove from the menu bar") : String(localized: "Show this subscription in the menu bar"))
+            .accessibilityLabel(Text(pinned ? "Remove from the menu bar" : "Show this subscription in the menu bar"))
+        }
     }
 
     /// Instead of the bar when there is no reading.
@@ -174,6 +203,104 @@ struct SubscriptionRow: View {
         case "AUTH_REQUIRED": return String(localized: "Sign in again")
         case "loading", "connecting": return String(localized: "Reading…")
         default: return String(localized: "No reading")
+        }
+    }
+}
+
+/// One window on one line: its length as a tag, when it resets, what is left, the percent. Fixed widths, so the
+/// columns line up from one subscription to the next.
+struct WindowFigures: View {
+    let window: QuotaWindow
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(window.tag()).font(.system(size: 10, weight: .semibold)).monospacedDigit().foregroundStyle(.secondary)
+                .padding(.horizontal, 4).frame(minWidth: 26).frame(height: 15)
+                .background(Capsule().fill(Color.primary.opacity(0.07)))
+            Text(reset).font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
+                .frame(width: 44, alignment: .trailing)
+            LeftBar(remainingPercent: window.remainingPercent, color: window.level.color).frame(width: 40)
+            Text(Format.percent(window.remainingPercent)).font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                .foregroundStyle(window.level == .normal ? Color.primary : window.level.color)
+                .frame(width: 34, alignment: .trailing)
+        }
+        .help(window.label + (window.resetsAt.map { " · " + String(localized: "Resets in \(Format.countdown(to: $0))") + " · " + $0.formatted(date: .abbreviated, time: .shortened) } ?? ""))
+    }
+
+    var reset: String { window.resetsAt.map { Format.countdown(to: $0) } ?? "" }
+}
+
+/// The subscription opened up: every window with its full name, the exact reset and what is used, model-scoped limits
+/// included; every balance; plan, mailbox, the agents that run on it and when it was last read.
+struct SubscriptionDetail: View {
+    let account: Account
+    let agents: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(account.allWindows) { window in
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(window.label).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(String(localized: "\(Format.percent(window.remainingPercent)) left")).font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                            .foregroundStyle(window.level == .normal ? Color.primary : window.level.color)
+                    }
+                    LeftBar(remainingPercent: window.remainingPercent, color: window.level.color)
+                    HStack(spacing: 6) {
+                        Text(resetLine(window)).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(String(localized: "\(Format.percent(window.usedPercent)) used")).monospacedDigit()
+                    }
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+            }
+            if let balances = account.usage?.balances, !balances.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(balances.enumerated()), id: \.offset) { _, balance in
+                        HStack {
+                            Text(Self.balanceName(balance.kind)).font(.system(size: 11)).foregroundStyle(.secondary)
+                            Spacer()
+                            Text(balance.text).font(.system(size: 11, weight: balance.kind == "total" ? .semibold : .regular)).monospacedDigit()
+                                .foregroundStyle(balance.kind == "total" && balance.isEmpty ? QuotaWindow.Level.critical.color : Color.primary)
+                        }
+                    }
+                }
+            }
+            if account.allWindows.isEmpty && (account.usage?.balances ?? []).isEmpty {
+                Text("No quota reading yet").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(facts, id: \.self) { Text($0).lineLimit(2) }
+            }
+            .font(.system(size: 10)).foregroundStyle(.secondary)
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.04)))
+    }
+
+    func resetLine(_ window: QuotaWindow) -> String {
+        guard let reset = window.resetsAt else { return String(localized: "No reset time") }
+        if reset <= Date() { return String(localized: "Reset due: waiting for a new reading") }
+        return String(localized: "Resets in \(Format.countdown(to: reset))") + " · " + reset.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var facts: [String] {
+        var out: [String] = []
+        let who = [account.plan.isEmpty ? nil : account.plan.capitalized, account.email.isEmpty ? nil : account.email, account.server ? String(localized: "Account of the server") : nil].compactMap { $0 }
+        if !who.isEmpty { out.append(who.joined(separator: " · ")) }
+        out.append(agents.isEmpty ? String(localized: "No agent uses it") : String(localized: "Used by \(agents.joined(separator: ", "))"))
+        if let at = account.usage?.fetchedAt { out.append(String(localized: "Read \(Format.ago(at))") + (account.usage?.stale == true ? " · " + String(localized: "out of date") : "")) }
+        if account.usage?.issue == "AUTH_REQUIRED" { out.append(String(localized: "Sign in again from the panel")) }
+        return out
+    }
+
+    static func balanceName(_ kind: String) -> String {
+        switch kind {
+        case "total": return String(localized: "Total")
+        case "granted": return String(localized: "Granted")
+        case "topped-up": return String(localized: "Topped up")
+        default: return kind.capitalized
         }
     }
 }
@@ -240,12 +367,15 @@ struct TokensSummary: View {
                 VStack(spacing: 0) {
                     ForEach(Array(snapshot.accounts.enumerated()), id: \.element.id) { index, account in
                         if index > 0 { Divider().padding(.leading, 30) }
-                        SubscriptionRow(account: account, title: snapshot.title(of: account), pinned: store.isPinned(account), onPin: { store.togglePin(account) })
+                        SubscriptionRow(account: account, title: snapshot.title(of: account), pinned: store.isPinned(account), expanded: store.expanded.contains(account.id),
+                                        agents: account.agentIds.compactMap { snapshot.agent($0)?.name },
+                                        onPin: { store.togglePin(account) },
+                                        onToggle: { store.toggleExpanded(account) })
                     }
                 }
                 .padding(.vertical, 2)
                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
-                Text("Pinned ones appear in the menu bar.").font(.system(size: 10)).foregroundStyle(.tertiary).padding(.horizontal, 2)
+                Text("Click a subscription for every limit. Pinned ones appear in the menu bar.").font(.system(size: 10)).foregroundStyle(.tertiary).padding(.horizontal, 2)
             }
         }
     }
@@ -366,16 +496,22 @@ enum ProviderIcon {
     }
 }
 
-/// What the menu bar shows next to the Cora icon: the working agents, then each pinned subscription as its provider's
-/// icon and what is left, the percent in orange or red near the limit.
+/// What the menu bar shows next to the Cora icon: each pinned subscription as its provider's icon and what is left, the
+/// percent in orange or red near the limit. A subscription with two limits stacks them, each with its length: `5h 64%`
+/// above `7d 80%`; subscriptions of one provider stand side by side under a single icon.
 enum MenuBarTitle {
-    struct Part: Hashable { var text: String; var level: QuotaWindow.Level?; var provider: String?; var title: String }
+    struct Line: Hashable { var tag: String; var value: String; var level: QuotaWindow.Level? }
+    struct Part: Hashable {
+        var text: String; var level: QuotaWindow.Level?; var provider: String?; var title: String
+        var lines: [Line] = []
+    }
 
     @MainActor static func parts(_ store: SpaceStore) -> [Part] {
         guard let snapshot = store.snapshot else { return [] }
-        var parts: [Part] = []
-        parts += snapshot.pinned(store.pins).map { Part(text: $0.value, level: $0.level, provider: $0.provider, title: $0.title) }
-        return parts
+        return snapshot.pinned(store.pins).map { pin in
+            let lines = pin.windows.count > 1 ? pin.windows.map { Line(tag: $0.tag(), value: Format.percent($0.remainingPercent), level: $0.level) } : []
+            return Part(text: pin.value, level: pin.level, provider: pin.provider, title: pin.title, lines: lines)
+        }
     }
 
     static func nsColor(_ level: QuotaWindow.Level?) -> NSColor {
@@ -416,7 +552,7 @@ enum MenuBarTitle {
                     out.append(NSAttributedString(string: first.title + " ", attributes: [.font: font, .foregroundColor: NSColor.labelColor]))
                 }
             }
-            if group.count == 1 {
+            if group.count == 1 && first.lines.isEmpty {
                 out.append(NSAttributedString(string: first.text, attributes: [.font: font, .foregroundColor: nsColor(first.level)]))
             } else {
                 let attachment = NSTextAttachment()
@@ -429,22 +565,45 @@ enum MenuBarTitle {
         return out
     }
 
-    /// Two or more readings of one provider, one above the other in a single column; drawn when shown, so the
-    /// colors follow a light or dark menu bar.
+    /// The readings of one provider in small type: one column per subscription, side by side; in each column its
+    /// limits one above the other (`5h 64%` over `7d 80%`), or its single figure in the middle. Drawn when shown, so
+    /// the colors follow a light or dark menu bar.
     static func stacked(_ group: [Part]) -> NSImage {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+        let tagFont = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
         let lineHeight: CGFloat = 9.5
-        let width = ceil(group.map { ($0.text as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0)
-        let height = lineHeight * CGFloat(group.count)
+        let gap: CGFloat = 5
+        func columnLines(_ part: Part) -> [Line] { part.lines.isEmpty ? [Line(tag: "", value: part.text, level: part.level)] : part.lines }
+        func size(_ text: String, _ font: NSFont) -> CGFloat { text.isEmpty ? 0 : ceil((text as NSString).size(withAttributes: [.font: font]).width) }
+        // Subscriptions with a single figure each share one column, as before; with two limits each gets its own.
+        let single = group.allSatisfy { $0.lines.isEmpty }
+        let lineSets = single ? [group.map { Line(tag: "", value: $0.text, level: $0.level) }] : group.map(columnLines)
+        let columns = lineSets.map { lines -> (lines: [Line], tagWidth: CGFloat, valueWidth: CGFloat) in
+            return (lines, lines.map { size($0.tag, tagFont) }.max() ?? 0, lines.map { size($0.value, font) }.max() ?? 0)
+        }
+        let widths = columns.map { $0.tagWidth + ($0.tagWidth > 0 ? 2 : 0) + $0.valueWidth }
+        let rows = columns.map(\.lines.count).max() ?? 1
+        let width = widths.reduce(0, +) + gap * CGFloat(max(0, columns.count - 1))
+        let height = lineHeight * CGFloat(rows)
         let image = NSImage(size: NSSize(width: width, height: height), flipped: true) { _ in
-            for (row, part) in group.enumerated() {
-                let text = NSAttributedString(string: part.text, attributes: [.font: font, .foregroundColor: nsColor(part.level)])
-                let size = text.size()
-                text.draw(at: NSPoint(x: width - size.width, y: CGFloat(row) * lineHeight + (lineHeight - size.height) / 2))
+            var x: CGFloat = 0
+            for (index, column) in columns.enumerated() {
+                let top = (height - lineHeight * CGFloat(column.lines.count)) / 2
+                for (row, line) in column.lines.enumerated() {
+                    let y = top + CGFloat(row) * lineHeight
+                    if !line.tag.isEmpty {
+                        let tag = NSAttributedString(string: line.tag, attributes: [.font: tagFont, .foregroundColor: NSColor.secondaryLabelColor])
+                        tag.draw(at: NSPoint(x: x, y: y + (lineHeight - tag.size().height) / 2 + 0.3))
+                    }
+                    let value = NSAttributedString(string: line.value, attributes: [.font: font, .foregroundColor: nsColor(line.level)])
+                    let valueSize = value.size()
+                    value.draw(at: NSPoint(x: x + widths[index] - valueSize.width, y: y + (lineHeight - valueSize.height) / 2))
+                }
+                x += widths[index] + gap
             }
             return true
         }
-        image.accessibilityDescription = group.map { "\($0.title) \($0.text)" }.joined(separator: ", ")
+        image.accessibilityDescription = group.map { part in "\(part.title) " + columnLines(part).map { "\($0.tag) \($0.value)".trimmingCharacters(in: .whitespaces) }.joined(separator: ", ") }.joined(separator: "; ")
         return image
     }
 }

@@ -17,6 +17,8 @@ final class SpaceStore: ObservableObject {
     @Published var spaceInput = "notseb.usecora.space"
     /// The subscriptions shown in the menu bar, chosen in the popover and kept on this Mac per space.
     @Published private(set) var pins: [String] = []
+    /// The subscriptions opened to show every limit; the popover remembers them while the app runs.
+    @Published var expanded: Set<String> = []
 
     private(set) var client: CoraClient?
     private var streamTask: Task<Void, Never>?
@@ -226,6 +228,10 @@ final class SpaceStore: ObservableObject {
         if let index = pins.firstIndex(of: account.id) { pins.remove(at: index) } else { pins.append(account.id) }
         guard let server = connection?.server, connection?.deviceId != "preview" else { return }
         try? Pins.save(pins, server: server)
+    }
+
+    func toggleExpanded(_ account: Account) {
+        if expanded.contains(account.id) { expanded.remove(account.id) } else { expanded.insert(account.id) }
     }
 
     func stepsFor(_ traceId: String) -> [Step] { steps[traceId] ?? traces[traceId]?.steps ?? [] }

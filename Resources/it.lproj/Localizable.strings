@@ -84,3 +84,14 @@
 "No agent matches your search." = "Nessun agente corrisponde alla ricerca.";
 "Balance" = "Saldo";
 "Pay-as-you-go: what is left on the account" = "A consumo: il credito rimasto sull'account";
+"Hide the details" = "Nascondi i dettagli";
+"Show every limit of this subscription" = "Mostra tutti i limiti di questo abbonamento";
+"Click a subscription for every limit. Pinned ones appear in the menu bar." = "Clicca un abbonamento per vedere tutti i limiti. Quelli con la puntina compaiono nella barra dei menu.";
+"%@ used" = "%@ usato";
+"No reset time" = "Nessun orario di azzeramento";
+"Reset due: waiting for a new reading" = "Azzeramento scaduto: aspetto una nuova lettura";
+"Read %@" = "Letto %@";
+"out of date" = "non aggiornato";
+"Total" = "Totale";
+"Granted" = "Omaggio";
+"Topped up" = "Ricaricato";

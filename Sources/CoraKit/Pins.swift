@@ -28,7 +28,10 @@ public struct PinnedQuota: Equatable, Sendable {
     public var window: QuotaWindow?
     public var balance: Balance? = nil
 
-    public var text: String { "\(title) \(value)" }
+    /// The account-wide windows, shortest first, as the menu bar stacks them: `5h 64%` above `7d 80%`.
+    public var windows: [QuotaWindow] = []
+
+    public var text: String { windows.count > 1 ? "\(title) " + windows.map { "\($0.tag()) \(Format.percent($0.remainingPercent))" }.joined(separator: " · ") : "\(title) \(value)" }
     /// What sits next to the provider's icon: `29%`, the balance of a pay-as-you-go account (`$14.90`), or `–`.
     public var value: String { window.map { Format.percent($0.remainingPercent) } ?? balance?.text ?? "–" }
     /// Red when the window is near its limit or the balance has run out.
@@ -40,7 +43,7 @@ extension Snapshot {
     public func pinned(_ ids: [String]) -> [PinnedQuota] {
         let chosen = accounts.filter { ids.contains($0.id) }
         return chosen.map { account in
-            PinnedQuota(accountId: account.id, provider: account.provider, title: title(of: account, among: chosen), window: account.tightestWindow, balance: account.tightestWindow == nil ? account.balance : nil)
+            PinnedQuota(accountId: account.id, provider: account.provider, title: title(of: account, among: chosen), window: account.tightestWindow, balance: account.tightestWindow == nil ? account.balance : nil, windows: account.mainWindows)
         }
     }
 

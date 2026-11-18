@@ -128,12 +128,29 @@ import Testing
         let one = snapshot.pinned([ids[0]])
         #expect(one.count == 1)
         #expect(one[0].accountId == ids[0])
-        #expect(one[0].text == "\(Providers.name(snapshot.accounts[0].provider)) 19%", "the tightest account-wide window of that subscription")
+        #expect(one[0].text == "\(Providers.name(snapshot.accounts[0].provider)) 5h 58% · 7d 19%", "both account-wide limits, each named by its length")
         #expect(one[0].value == "19%" && one[0].provider == snapshot.accounts[0].provider, "the menu bar draws the provider's icon, then what is left")
         #expect(snapshot.pinned(["gone", ids[1]]).map(\.accountId) == [ids[1]], "a subscription removed from the space drops out")
         #expect(snapshot.pinned([ids[1], ids[0]]).map(\.accountId) == ids, "the order of the space, not of the clicks")
         let unread = try #require(snapshot.pinned([ids[1]]).first)
         if snapshot.accounts[1].tightestWindow == nil { #expect(unread.text.hasSuffix("–")) }
+    }
+
+    @Test func twoLimitsAreShownApartAndNamed() throws {
+        let snapshot = try fixture()
+        let claude = snapshot.accounts[0]
+        #expect(claude.mainWindows.map(\.id) == ["five_hour", "seven_day"], "the 5-hour session above the week; model-scoped and unknown windows stay in the details")
+        #expect(claude.allWindows.map(\.id) == ["five_hour", "seven_day", "x", "weekly:fable"], "the details list every window, account-wide first")
+        #expect(claude.mainWindows.map { $0.tag(italian: false) } == ["5h", "7d"])
+        #expect(claude.mainWindows.map { $0.tag(italian: true) } == ["5h", "7g"])
+        let pin = try #require(snapshot.pinned([claude.id]).first)
+        #expect(pin.value == "19%", "the single figure is still the tightest window")
+        #expect(pin.windows.map(\.id) == ["five_hour", "seven_day"], "the menu bar stacks both limits")
+        let daily = QuotaWindow(id: "d", kind: .custom, usedPercent: 1, resetsAt: nil, minutes: 1440)
+        let month = QuotaWindow(id: "m", kind: .custom, usedPercent: 1, resetsAt: nil, minutes: 43_200)
+        #expect(daily.tag(italian: false) == "24h" && month.tag(italian: false) == "30d")
+        let single = Account(id: "g", provider: "grok", label: "Grok", usage: QuotaUsage(windows: [QuotaWindow(id: "w", kind: .weekly, usedPercent: 1, resetsAt: nil)]), agentIds: [])
+        #expect(single.mainWindows.count == 1, "one limit, one line")
     }
 
     @Test func payAsYouGoAccountsShowTheirBalance() throws {

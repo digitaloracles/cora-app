@@ -67,7 +67,7 @@ enum CLI {
                     Swift.print("Disconnected from \(connection.host)")
                 } else { Swift.print("Not connected") }
             case .renderPreview(let directory):
-                try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_codex", "sub_claude", "sub_claude_buzz"]), selection: Samples.selection(), directory: directory, steps: Samples.steps)
+                try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_codex", "sub_claude", "sub_claude_buzz", "sub_grok", "provider_deepseek"]), selection: Samples.selection(), directory: directory, steps: Samples.steps)
             case .renderLive(let directory):
                 let store = SpaceStore()
                 store.start()
@@ -136,6 +136,11 @@ enum CLI {
             for tab in PopoverTab.allCases {
                 try live(PopoverView(store: store, tab: tab), appearance: appearance, to: folder.appendingPathComponent("popover-live-\(tab.rawValue)-\(name).png"), label: "popover \(tab.rawValue) \(name)")
             }
+            store.expanded = Set(["sub_claude", "provider_deepseek"])
+            try snapshot(PopoverView(store: store, tab: .subscriptions).environment(\.isStaticPreview, true), width: 360, height: nil, appearance: appearance,
+                         to: folder.appendingPathComponent("popover-subscriptions-expanded-\(name).png"))
+            try live(PopoverView(store: store, tab: .subscriptions), appearance: appearance, to: folder.appendingPathComponent("popover-live-subscriptions-expanded-\(name).png"), label: "popover subscriptions expanded \(name)")
+            store.expanded = []
             try snapshot(MenuBarStrip(store: store), width: 520, height: 26, appearance: appearance, to: folder.appendingPathComponent("menubar-\(name).png"))
             if let id = selection.agentId, let agent = store.snapshot?.agent(id) {
                 let detail = AgentDetail(store: store, selection: selection, agent: agent).environment(\.isStaticPreview, true)
