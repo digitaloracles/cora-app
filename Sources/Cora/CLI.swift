@@ -67,7 +67,7 @@ enum CLI {
                     Swift.print("Disconnected from \(connection.host)")
                 } else { Swift.print("Not connected") }
             case .renderPreview(let directory):
-                try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_codex", "sub_claude", "sub_claude_buzz", "sub_grok", "provider_deepseek"]), selection: Samples.selection(), directory: directory, steps: Samples.steps)
+                try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_codex", "sub_claude", "sub_claude_buzz", "sub_grok", "provider_deepseek"], history: Samples.history), selection: Samples.selection(), directory: directory, steps: Samples.steps)
             case .renderLive(let directory):
                 let store = SpaceStore()
                 store.start()
@@ -151,6 +151,13 @@ enum CLI {
             let agent = selection.agentId
             selection.agentId = LiveSelection.tokens
             try snapshot(LiveWindow(store: store, selection: selection), width: 1000, height: 700, appearance: appearance, to: folder.appendingPathComponent("window-tokens-\(name).png"))
+            for (label, width, height) in [("narrow", CGFloat(660), CGFloat(760)), ("wide", CGFloat(1440), CGFloat(900))] {
+                try snapshot(LiveWindow(store: store, selection: selection), width: width, height: height, appearance: appearance, to: folder.appendingPathComponent("window-tokens-\(label)-\(name).png"))
+            }
+            for width in [CGFloat(460), 760, 1200] {
+                try snapshot(TokensPage(store: store, selection: selection, snapshot: store.snapshot!).environment(\.isStaticPreview, true), width: width, height: nil, appearance: appearance,
+                             to: folder.appendingPathComponent("tokens-page-\(Int(width))-\(name).png"))
+            }
             selection.agentId = agent
         }
         Swift.print("Rendered into \(folder.path)")

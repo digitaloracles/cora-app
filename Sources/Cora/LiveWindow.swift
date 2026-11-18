@@ -44,30 +44,37 @@ struct LiveWindow: View {
                 Text("Choose an agent").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: 820, minHeight: 560)
+        .frame(minWidth: 640, minHeight: 480)
         .onChange(of: selection.agentId) { _, _ in selection.thread = nil; selection.threadDetail = nil }
     }
 }
 
-/// The window's Tokens page: the same summary as the popover, with room to breathe.
+/// The window's Tokens page: the subscriptions, side by side when there is room, then the panel's heatmaps of what
+/// everyone and every agent spent. It follows the window's width.
 struct TokensPage: View {
     @ObservedObject var store: SpaceStore
     @ObservedObject var selection: LiveSelection
     let snapshot: Snapshot
     @Environment(\.isStaticPreview) private var isStaticPreview
+    @State private var width: CGFloat = 760
 
     var body: some View {
         if isStaticPreview { content } else { ScrollView { content } }
     }
 
+    /// The width the content has inside the page's padding, at most 1100.
+    var inner: CGFloat { max(280, min(1100, width - 40)) }
+
     var content: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 22) {
             Text("Tokens").font(.system(size: 20, weight: .semibold))
-            TokensSummary(store: store, snapshot: snapshot, openAgent: { selection.agentId = $0 })
+            TokensSummary(store: store, snapshot: snapshot, openAgent: { selection.agentId = $0 }, showTokens: false, columns: inner >= 720 ? 2 : 1)
+            UsageHeatmaps(store: store, snapshot: snapshot, width: inner, openAgent: { selection.agentId = $0 })
         }
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: 1100, alignment: .leading)
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }
 

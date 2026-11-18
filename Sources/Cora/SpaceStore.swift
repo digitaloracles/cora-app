@@ -19,6 +19,9 @@ final class SpaceStore: ObservableObject {
     @Published private(set) var pins: [String] = []
     /// The subscriptions opened to show every limit; the popover remembers them while the app runs.
     @Published var expanded: Set<String> = []
+    /// A year of daily usage from the server; nil until read, or on servers without `/app/v1/usage`.
+    @Published private(set) var history: UsageHistory?
+    private var historyReadAt: Date?
 
     private(set) var client: CoraClient?
     private var streamTask: Task<Void, Never>?
@@ -26,8 +29,9 @@ final class SpaceStore: ObservableObject {
     private var pendingRefresh: Task<Void, Never>?
     private let maxSteps = 300
 
-    init(preview: Snapshot? = nil, pins: [String] = []) {
+    init(preview: Snapshot? = nil, pins: [String] = [], history: UsageHistory? = nil) {
         self.pins = pins
+        self.history = history
         if let preview {
             snapshot = preview
             phase = .ready
@@ -116,6 +120,7 @@ final class SpaceStore: ObservableObject {
         if let client { try? await client.signOut() }
         if let connection { Storage.forget(connection) }
         client = nil; connection = nil; snapshot = nil; steps = [:]; traces = [:]; streamOnline = false
+        history = nil; historyReadAt = nil
         phase = .disconnected
     }
 
@@ -124,6 +129,7 @@ final class SpaceStore: ObservableObject {
         do {
             let fresh = try await client.snapshot()
             snapshot = fresh
+            await readHistory(client)
             refreshedAt = Date()
             phase = .ready
             if var connection, connection.spaceName != fresh.space.name || connection.userName != fresh.user.name {
@@ -135,6 +141,25 @@ final class SpaceStore: ObservableObject {
         } catch {
             phase = snapshot == nil ? .failed(error.localizedDescription) : .ready
         }
+    }
+
+    /// The heatmap's year, read again every few minutes; until then (or on an older server) the snapshot's month.
+    private func readHistory(_ client: CoraClient) async {
+        if let historyReadAt, Date().timeIntervalSince(historyReadAt) < 300 { return }
+        historyReadAt = Date()
+        do { history = try await client.usage() }
+        catch ClientError.http(404, _) { history = nil }
+        catch {}
+    }
+
+    /// What the heatmaps draw.
+    var usageHistory: UsageHistory? {
+        guard let snapshot else { return nil }
+        let month = UsageHistory(snapshot: snapshot)
+        guard let history else { return month }
+        // The snapshot is fresher: today's turns land there first.
+        let recent = Set(month.usage.map(\.day))
+        return UsageHistory(today: max(history.today, month.today), usage: history.usage.filter { !recent.contains($0.day) } + month.usage)
     }
 
     private func revoked(_ message: String) {

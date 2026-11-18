@@ -95,3 +95,10 @@
 "Total" = "Totale";
 "Granted" = "Omaggio";
 "Topped up" = "Ricaricato";
+"less" = "meno";
+"more" = "più";
+"Usage" = "Consumi";
+"All together" = "Tutti insieme";
+"%@ · nothing" = "%@ · niente";
+"One square per day: point at one to see how much." = "Un quadrato per giorno: passaci sopra per vedere quanto.";
+"Nothing used yet." = "Ancora nessun consumo.";

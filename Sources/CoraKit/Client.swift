@@ -61,6 +61,8 @@ public struct CoraClient: Sendable {
     }
 
     public func snapshot() async throws -> Snapshot { try await get("/app/v1/snapshot", as: Snapshot.self) }
+    /// A year of daily usage; servers released before the heatmap answer 404.
+    public func usage(days: Int = 365) async throws -> UsageHistory { try await get("/app/v1/usage?days=\(days)", as: UsageHistory.self) }
     public func trace(_ id: String) async throws -> TraceDetail { try await get("/app/v1/traces/\(id)", as: TraceDetail.self) }
     public func thread(_ id: String) async throws -> ThreadDetail {
         let escaped = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_.:"))) ?? id

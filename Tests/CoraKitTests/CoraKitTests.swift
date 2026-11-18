@@ -213,4 +213,35 @@ import Testing
         #expect(Pins.load(server: notseb).isEmpty)
         #expect(Pins.load(server: other) == ["sub_x"])
     }
+
+    @Test func heatmapFollowsThePanel() throws {
+        let json = #"{"days":365,"today":"2026-11-18","usage":[{"agentId":"a","day":"2026-11-04","tokensIn":80,"tokensOut":20,"turns":2},{"agentId":"b","day":"2026-11-18","tokensIn":300,"tokensOut":50,"turns":3},{"agentId":"a","day":"2026-11-18","tokensIn":50,"tokensOut":0,"turns":1},{"agentId":"a","day":"2026-11-25","tokensIn":9,"tokensOut":0,"turns":1}]}"#
+        let history = try JSONDecoder().decode(UsageHistory.self, from: Data(json.utf8))
+        #expect(history.today == "2026-11-18")
+        #expect(history.total() == 509 && history.total(agentId: "a") == 159)
+        #expect(history.byDay()["2026-11-18"] == Heatmap.Spent(tokens: 400, turns: 4), "everyone together adds the agents up")
+        let map = try #require(Heatmap(byDay: history.byDay(), today: history.today))
+        #expect(map.firstDay == "2026-11-04" && map.lastDay == "2026-11-18", "from the first use to today, nothing after")
+        #expect(map.rows == 7 && map.weeks.count == 3 && map.weeks.map(\.count) == [7, 7, 3], "weeks start on Monday: the 4th is a Wednesday")
+        #expect(map.weeks[0].prefix(2).allSatisfy { $0.day == nil }, "two blank squares before the first Wednesday")
+        #expect(map.weeks[0][2].day == "2026-11-04" && map.weeks[0][2].level == 1)
+        #expect(map.weeks[2][2].day == "2026-11-18" && map.weeks[2][2].level == 4 && map.weeks[2][2].turns == 4)
+        #expect(map.weeks[1].allSatisfy { $0.level == 0 }, "an empty day is level 0")
+        #expect(map.months == [0: 10], "November labelled once")
+        #expect(Heatmap.level(1, peak: 1_000_000) == 1 && Heatmap.level(500, peak: 1000) == 2 && Heatmap.level(999, peak: 1000) == 4)
+        let single = try #require(Heatmap(byDay: ["2026-11-18": .init(tokens: 5, turns: 1)], today: "2026-11-18"))
+        #expect(single.rows == 3 && single.weeks.count == 1, "a short history stays compact")
+        #expect(Heatmap(byDay: [:], today: "2026-11-18") == nil)
+        #expect(Heatmap(byDay: ["2026-11-19": .init(tokens: 5, turns: 1)], today: "2026-11-18") == nil)
+    }
+
+    @Test func heatmapFallsBackOnTheSnapshotMonth() {
+        let usage = AgentUsage(today: .zero, week: .zero, month: .zero, days: [try! JSONDecoder().decode(DayTokens.self, from: Data(#"{"day":"2026-11-17","tokensIn":10,"tokensOut":5,"turns":1}"#.utf8))])
+        let agent = Agent(id: "a", name: "A", color: "#000", model: "", state: .idle, accountIds: [], usage: usage)
+        let snapshot = Snapshot(generatedAt: ISO8601DateFormatter().date(from: "2026-11-18T23:30:00Z"), timezone: "Europe/Rome",
+                                space: .init(name: "s", origin: "https://s.usecora.space"), user: .init(id: "u", name: "U", email: "u@x", role: "owner"), accounts: [], agents: [agent])
+        let history = UsageHistory(snapshot: snapshot)
+        #expect(history.today == "2026-11-19", "today in the space's time zone")
+        #expect(history.usage == [UsageHistory.Row(agentId: "a", day: "2026-11-17", tokensIn: 10, tokensOut: 5, turns: 1)])
+    }
 }

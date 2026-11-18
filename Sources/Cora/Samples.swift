@@ -20,6 +20,25 @@ enum Samples {
         return AgentUsage(today: sum(list.suffix(1)), week: sum(list.suffix(7)), month: sum(list[...]), days: list)
     }
 
+    /// About five months of daily usage for the heatmaps: quiet weekends, a busy stretch, a pause.
+    static let history: UsageHistory = {
+        let bases = [("ag_buzz", 2_400_000), ("ag_ada", 900_000), ("ag_nico", 1_300_000), ("ag_radix", 300_000)]
+        let today = Heatmap.dayKey(now, timeZone: .current)
+        var rows: [UsageHistory.Row] = []
+        for (offset, (agent, base)) in bases.enumerated() {
+            let span = 150 - offset * 35
+            for index in 0..<span {
+                let date = Calendar.current.date(byAdding: .day, value: index - span + 1, to: now)!
+                let weekday = Calendar.current.component(.weekday, from: date)
+                if (index * 7 + offset * 3) % 11 == 0 || (index > 40 && index < 48 && offset != 0) { continue }
+                let wave = (sin(Double(index + offset * 5) / 6) + 1.25) * (index > span - 30 ? 1.6 : 1)
+                let total = Int(Double(base) * wave * (weekday == 1 || weekday == 7 ? 0.25 : 1))
+                rows.append(UsageHistory.Row(agentId: agent, day: Heatmap.dayKey(date, timeZone: .current), tokensIn: total * 4 / 5, tokensOut: total / 5, turns: max(1, total / 40_000)))
+            }
+        }
+        return UsageHistory(today: today, usage: rows)
+    }()
+
     static let thinking = Step(kind: .thinking, at: now.addingTimeInterval(-40), text: "The snapshot has the accounts already: I map each subscription to the agents that run on it before drawing the bars.")
 
     static let steps: [String: [Step]] = ["tr_buzz": [

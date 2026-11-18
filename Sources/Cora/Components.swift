@@ -220,7 +220,7 @@ struct WindowFigures: View {
             LeftBar(remainingPercent: window.remainingPercent, color: window.level.color).frame(width: 36)
             Text(Format.percent(window.remainingPercent)).font(.system(size: 12, weight: .semibold)).monospacedDigit()
                 .foregroundStyle(window.level == .normal ? Color.primary : window.level.color)
-                .frame(width: 34, alignment: .trailing)
+                .lineLimit(1).fixedSize().frame(width: 38, alignment: .trailing)
         }
         .fixedSize()
         .help(window.label + (window.resetsAt.map { " · " + String(localized: "Resets in \(Format.countdown(to: $0))") + " · " + $0.formatted(date: .abbreviated, time: .shortened) } ?? ""))
@@ -355,6 +355,8 @@ struct TokensSummary: View {
     var openAgent: (String) -> Void = { _ in }
     var showSubscriptions = true
     var showTokens = true
+    /// Two on a wide page: the subscriptions split into two blocks side by side.
+    var columns = 1
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -370,20 +372,33 @@ struct TokensSummary: View {
                 Text("No subscription is linked to your agents.").font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
             }
             if !snapshot.accounts.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(Array(snapshot.accounts.enumerated()), id: \.element.id) { index, account in
-                        if index > 0 { Divider().padding(.leading, 30) }
-                        SubscriptionRow(account: account, title: snapshot.title(of: account), pinned: store.isPinned(account), expanded: store.expanded.contains(account.id),
-                                        agents: account.agentIds.compactMap { snapshot.agent($0)?.name },
-                                        onPin: { store.togglePin(account) },
-                                        onToggle: { store.toggleExpanded(account) })
+                if columns > 1 && snapshot.accounts.count > 1 {
+                    let half = (snapshot.accounts.count + 1) / 2
+                    HStack(alignment: .top, spacing: 12) {
+                        block(Array(snapshot.accounts.prefix(half)))
+                        block(Array(snapshot.accounts.dropFirst(half)))
                     }
+                } else {
+                    block(snapshot.accounts)
                 }
-                .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
                 Text("Click a subscription for every limit. Pinned ones appear in the menu bar.").font(.system(size: 10)).foregroundStyle(.tertiary).padding(.horizontal, 2)
             }
         }
+    }
+
+    func block(_ accounts: [Account]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
+                if index > 0 { Divider().padding(.leading, 30) }
+                SubscriptionRow(account: account, title: snapshot.title(of: account), pinned: store.isPinned(account), expanded: store.expanded.contains(account.id),
+                                agents: account.agentIds.compactMap { snapshot.agent($0)?.name },
+                                onPin: { store.togglePin(account) },
+                                onToggle: { store.toggleExpanded(account) })
+            }
+        }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
     }
 
     var tokens: some View {
