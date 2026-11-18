@@ -23,10 +23,13 @@ public enum Pins {
 /// One pinned subscription as the menu bar shows it: `Claude 29%`.
 public struct PinnedQuota: Equatable, Sendable {
     public var accountId: String
+    public var provider: String
     public var title: String
     public var window: QuotaWindow?
 
-    public var text: String { window.map { "\(title) \(Format.percent($0.remainingPercent))" } ?? "\(title) –" }
+    public var text: String { "\(title) \(value)" }
+    /// What sits next to the provider's icon: `29%`, or `–` without a reading.
+    public var value: String { window.map { Format.percent($0.remainingPercent) } ?? "–" }
 }
 
 extension Snapshot {
@@ -38,7 +41,7 @@ extension Snapshot {
             let shared = (providers[account.provider]?.count ?? 0) > 1
             let detail = account.label.isEmpty ? account.email.split(separator: "@").first.map(String.init) ?? account.id : account.label
             let title = shared && detail != Providers.name(account.provider) ? "\(Providers.name(account.provider)) · \(detail)" : Providers.name(account.provider)
-            return PinnedQuota(accountId: account.id, title: title, window: account.tightestWindow)
+            return PinnedQuota(accountId: account.id, provider: account.provider, title: title, window: account.tightestWindow)
         }
     }
 }

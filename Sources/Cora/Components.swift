@@ -249,15 +249,42 @@ struct StepRow: View {
     }
 }
 
-/// What the menu bar shows next to the icon: the working agents, then each pinned subscription in its color.
+/// Each provider's mark, black on clear, drawn in the menu bar's text color.
+enum ProviderIcon {
+    static var cache: [String: NSImage] = [:]
+
+    static func template(_ provider: String) -> NSImage? {
+        if let image = cache[provider] { return image }
+        guard let url = Bundle.main.url(forResource: provider, withExtension: "pdf", subdirectory: "ProviderIcons"), let image = NSImage(contentsOf: url) else { return nil }
+        image.isTemplate = true
+        cache[provider] = image
+        return image
+    }
+
+    /// Tinted when drawn, so it follows a light or dark menu bar like the text beside it.
+    static func tinted(_ provider: String, color: NSColor, size: CGFloat) -> NSImage? {
+        guard let base = template(provider) else { return nil }
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            base.draw(in: rect)
+            color.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        image.accessibilityDescription = Providers.name(provider)
+        return image
+    }
+}
+
+/// What the menu bar shows next to the Cora icon: the working agents, then each pinned subscription as its provider's
+/// icon and what is left, the percent in orange or red near the limit.
 enum MenuBarTitle {
-    struct Part: Hashable { var text: String; var level: QuotaWindow.Level? }
+    struct Part: Hashable { var text: String; var level: QuotaWindow.Level?; var provider: String?; var title: String }
 
     @MainActor static func parts(_ store: SpaceStore) -> [Part] {
         guard let snapshot = store.snapshot else { return [] }
         var parts: [Part] = []
-        if !snapshot.working.isEmpty { parts.append(Part(text: "\(snapshot.working.count)", level: nil)) }
-        parts += snapshot.pinned(store.pins).map { Part(text: $0.text, level: $0.window?.level) }
+        if !snapshot.working.isEmpty { parts.append(Part(text: "\(snapshot.working.count)", level: nil, provider: nil, title: "")) }
+        parts += snapshot.pinned(store.pins).map { Part(text: $0.value, level: $0.window?.level, provider: $0.provider, title: $0.title) }
         return parts
     }
 
@@ -273,29 +300,57 @@ enum MenuBarTitle {
         let out = NSMutableAttributedString()
         let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
         for (index, part) in parts.enumerated() {
-            out.append(NSAttributedString(string: index == 0 ? " " : "  ·  ", attributes: [.font: font, .foregroundColor: NSColor.tertiaryLabelColor]))
+            out.append(NSAttributedString(string: index == 0 ? " " : "   ", attributes: [.font: font]))
+            if let provider = part.provider {
+                if let icon = ProviderIcon.tinted(provider, color: .labelColor, size: 13) {
+                    let attachment = NSTextAttachment()
+                    attachment.image = icon
+                    attachment.bounds = NSRect(x: 0, y: -2, width: 13, height: 13)
+                    out.append(NSAttributedString(attachment: attachment))
+                    out.append(NSAttributedString(string: "\u{2009}", attributes: [.font: font]))
+                } else {
+                    out.append(NSAttributedString(string: part.title + " ", attributes: [.font: font, .foregroundColor: NSColor.labelColor]))
+                }
+            }
             out.append(NSAttributedString(string: part.text, attributes: [.font: font, .foregroundColor: nsColor(part.level)]))
         }
         return out
     }
 }
 
-/// The menu bar item drawn as SwiftUI, for screenshots: same icon, same parts, same colors.
+/// The menu bar item for screenshots: an AppKit button with the same image and title the status item gets.
 struct MenuBarStrip: View {
     @ObservedObject var store: SpaceStore
 
     var body: some View {
         HStack(spacing: 0) {
             Spacer()
-            HStack(spacing: 4) {
-                Image(systemName: (store.snapshot?.working.isEmpty ?? true) ? "person.2.wave.2" : "person.2.wave.2.fill").font(.system(size: 13))
-                Text(AttributedString(MenuBarTitle.attributed(MenuBarTitle.parts(store))))
-            }
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.1)))
+            MenuBarButton(working: !(store.snapshot?.working.isEmpty ?? true), title: MenuBarTitle.attributed(MenuBarTitle.parts(store)))
+                .fixedSize()
+                .padding(.horizontal, 6)
+                .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.1)))
             Image(systemName: "wifi").font(.system(size: 13)).padding(.leading, 14).foregroundStyle(.secondary)
             Text("12:34").font(.system(size: 13)).padding(.leading, 12).padding(.trailing, 12).foregroundStyle(.secondary)
         }
         .frame(height: 26)
+    }
+}
+
+struct MenuBarButton: NSViewRepresentable {
+    let working: Bool
+    let title: NSAttributedString
+
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title: "", target: nil, action: nil)
+        button.isBordered = false
+        button.imagePosition = .imageLeading
+        return button
+    }
+
+    func updateNSView(_ button: NSButton, context: Context) {
+        let symbol = NSImage(systemSymbolName: working ? "person.2.wave.2.fill" : "person.2.wave.2", accessibilityDescription: "Cora")
+        symbol?.isTemplate = true
+        button.image = symbol
+        button.attributedTitle = title
     }
 }

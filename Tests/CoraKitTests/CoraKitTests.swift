@@ -129,6 +129,7 @@ import Testing
         #expect(one.count == 1)
         #expect(one[0].accountId == ids[0])
         #expect(one[0].text == "\(Providers.name(snapshot.accounts[0].provider)) 19%", "the tightest account-wide window of that subscription")
+        #expect(one[0].value == "19%" && one[0].provider == snapshot.accounts[0].provider, "the menu bar draws the provider's icon, then what is left")
         #expect(snapshot.pinned(["gone", ids[1]]).map(\.accountId) == [ids[1]], "a subscription removed from the space drops out")
         #expect(snapshot.pinned([ids[1], ids[0]]).map(\.accountId) == ids, "the order of the space, not of the clicks")
         let unread = try #require(snapshot.pinned([ids[1]]).first)
@@ -142,6 +143,7 @@ import Testing
                                            Account(id: "b", provider: "claude", label: "", email: "team@usecora.space", usage: usage, agentIds: []),
                                            Account(id: "c", provider: "codex", label: "ChatGPT Pro", usage: nil, agentIds: [])], agents: [])
         #expect(snapshot.pinned(["a", "b", "c"]).map(\.text) == ["Claude · Max Seb 60%", "Claude · team 60%", "Codex –"])
+        #expect(snapshot.pinned(["c"]).map(\.value) == ["–"], "no reading yet")
     }
 
     @Test func pinsPersistPerSpace() throws {

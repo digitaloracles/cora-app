@@ -1,0 +1,1 @@
+Provider marks from Lobe Icons (`@lobehub/icons-static-svg`, MIT License, https://github.com/lobehub/lobe-icons), converted from the monochrome SVGs to PDF template images. The marks belong to their owners and identify each subscription's provider.
