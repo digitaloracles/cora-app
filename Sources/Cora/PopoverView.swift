@@ -2,19 +2,21 @@ import CoraKit
 import SwiftUI
 
 enum PopoverTab: String, CaseIterable, Identifiable {
-    case agents, tokens, threads
+    case agents, tokens, subscriptions, threads
     var id: String { rawValue }
     var title: LocalizedStringKey {
         switch self {
         case .agents: return "Agents"
         case .tokens: return "Tokens"
+        case .subscriptions: return "Subscriptions"
         case .threads: return "Threads"
         }
     }
 }
 
-/// The menu bar popover: the space, then three tabs. Agents with what they do now; Tokens with one line per
-/// subscription (each one can be pinned to the menu bar) and each agent's tokens in the last 7 days; Threads with the latest reasoning of each thread.
+/// The menu bar popover: the space, then four tabs. Agents with what they do now; Tokens with each agent's tokens in
+/// the last 7 days; Subscriptions with one line per subscription (each one can be pinned to the menu bar); Threads with
+/// the latest reasoning of each thread. The popover is as tall as the tab's content and scrolls only past the screen.
 struct PopoverView: View {
     @ObservedObject var store: SpaceStore
     var openAgent: (String?) -> Void = { _ in }
@@ -36,6 +38,7 @@ struct PopoverView: View {
                         switch tab {
                         case .agents: agents(snapshot)
                         case .tokens: tokens(snapshot)
+                        case .subscriptions: subscriptions(snapshot)
                         case .threads: threads(snapshot)
                         }
                     }
@@ -59,7 +62,11 @@ struct PopoverView: View {
     }
 
     func tokens(_ snapshot: Snapshot) -> some View {
-        TokensSummary(store: store, snapshot: snapshot, openAgent: { openAgent($0) })
+        TokensSummary(store: store, snapshot: snapshot, openAgent: { openAgent($0) }, showSubscriptions: false)
+    }
+
+    func subscriptions(_ snapshot: Snapshot) -> some View {
+        TokensSummary(store: store, snapshot: snapshot, showTokens: false)
     }
 
     @ViewBuilder func threads(_ snapshot: Snapshot) -> some View {
@@ -74,9 +81,27 @@ struct PopoverView: View {
         Text(text).font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
     }
 
-    /// A static render has no scroll view: it shows the whole list.
+    /// The tab's content at its full height. A bare ScrollView has no height of its own, so the popover used to
+    /// collapse to a short box and scroll even with room to spare: the scroll view now takes the measured height of
+    /// what it holds, and scrolls only when that is taller than the screen allows. A static render has no scroll view.
     @ViewBuilder func scrolling<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        if isStaticPreview { content() } else { ScrollView { content() }.frame(maxHeight: 560) }
+        if isStaticPreview {
+            content()
+        } else {
+            ScrollView {
+                content().background(GeometryReader { proxy in Color.clear.preference(key: ContentHeight.self, value: proxy.size.height) })
+            }
+            .frame(height: min(max(contentHeight, 40), Self.maxContentHeight))
+            .onPreferenceChange(ContentHeight.self) { contentHeight = $0 }
+        }
+    }
+
+    @State private var contentHeight: CGFloat = 0
+
+    /// The room under the menu bar, less the header and the tabs.
+    static var maxContentHeight: CGFloat {
+        let visible = NSScreen.main?.visibleFrame.height ?? 800
+        return max(240, visible - 150)
     }
 
     var header: some View {
@@ -242,4 +267,9 @@ struct ThreadRow: View {
 
     var active: Bool { entry.thread.status == "active" }
     var tokens: Int { entry.thread.tokensIn + entry.thread.tokensOut }
+}
+
+private struct ContentHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

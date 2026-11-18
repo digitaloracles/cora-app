@@ -207,57 +207,67 @@ struct ProviderMark: View {
     }
 }
 
-/// The Tokens page, the same in the popover and in the window: the subscriptions with their pin, then how many
-/// tokens each agent used in the last 7 days.
+/// The Tokens page of the window: the subscriptions with their pin, then how many tokens each agent used in the
+/// last 7 days. The popover shows the two halves in their own tabs.
 struct TokensSummary: View {
     @ObservedObject var store: SpaceStore
     let snapshot: Snapshot
     var openAgent: (String) -> Void = { _ in }
+    var showSubscriptions = true
+    var showTokens = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                heading(Text("Subscriptions"), trailing: nil)
-                if snapshot.accounts.isEmpty {
-                    Text("No subscription is linked to your agents.").font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
-                }
-                if !snapshot.accounts.isEmpty {
-                    VStack(spacing: 0) {
-                        ForEach(Array(snapshot.accounts.enumerated()), id: \.element.id) { index, account in
-                            if index > 0 { Divider().padding(.leading, 30) }
-                            SubscriptionRow(account: account, title: snapshot.title(of: account), pinned: store.isPinned(account), onPin: { store.togglePin(account) })
-                        }
-                    }
-                    .padding(.vertical, 2)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
-                    Text("Pinned ones appear in the menu bar.").font(.system(size: 10)).foregroundStyle(.tertiary).padding(.horizontal, 2)
-                }
+            if showSubscriptions { subscriptions }
+            if showTokens { tokens }
+        }
+    }
+
+    var subscriptions: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            heading(Text("Subscriptions"), trailing: nil)
+            if snapshot.accounts.isEmpty {
+                Text("No subscription is linked to your agents.").font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
             }
-            VStack(alignment: .leading, spacing: 6) {
-                let agents = snapshot.agents.filter { $0.usage.week.total > 0 }.sorted { $0.usage.week.total > $1.usage.week.total }
-                let peak = max(1, agents.first?.usage.week.total ?? 1)
-                heading(Text("Tokens, last 7 days"), trailing: Format.tokens(snapshot.agents.map(\.usage.week.total).reduce(0, +)))
-                if agents.isEmpty {
-                    Text("No tokens used in the last 7 days.").font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
-                }
-                ForEach(agents) { agent in
-                    Button { openAgent(agent.id) } label: {
-                        HStack(spacing: 10) {
-                            AgentAvatar(agent: agent, url: store.avatarURL(agent), size: 20)
-                            Text(agent.name).font(.system(size: 12, weight: .medium)).lineLimit(1).frame(width: 90, alignment: .leading)
-                            GeometryReader { proxy in
-                                Capsule().fill(Color(hex: agent.color, fallback: .accentColor).opacity(0.8))
-                                    .frame(width: max(4, proxy.size.width * CGFloat(agent.usage.week.total) / CGFloat(peak)), height: 5)
-                                    .frame(maxHeight: .infinity, alignment: .center)
-                            }
-                            .frame(height: 12)
-                            Text(Format.tokens(agent.usage.week.total)).font(.system(size: 12)).monospacedDigit().frame(width: 52, alignment: .trailing)
-                        }
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .contentShape(Rectangle())
+            if !snapshot.accounts.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(snapshot.accounts.enumerated()), id: \.element.id) { index, account in
+                        if index > 0 { Divider().padding(.leading, 30) }
+                        SubscriptionRow(account: account, title: snapshot.title(of: account), pinned: store.isPinned(account), onPin: { store.togglePin(account) })
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.vertical, 2)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
+                Text("Pinned ones appear in the menu bar.").font(.system(size: 10)).foregroundStyle(.tertiary).padding(.horizontal, 2)
+            }
+        }
+    }
+
+    var tokens: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            let agents = snapshot.agents.filter { $0.usage.week.total > 0 }.sorted { $0.usage.week.total > $1.usage.week.total }
+            let peak = max(1, agents.first?.usage.week.total ?? 1)
+            heading(Text("Tokens, last 7 days"), trailing: Format.tokens(snapshot.agents.map(\.usage.week.total).reduce(0, +)))
+            if agents.isEmpty {
+                Text("No tokens used in the last 7 days.").font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
+            }
+            ForEach(agents) { agent in
+                Button { openAgent(agent.id) } label: {
+                    HStack(spacing: 10) {
+                        AgentAvatar(agent: agent, url: store.avatarURL(agent), size: 20)
+                        Text(agent.name).font(.system(size: 12, weight: .medium)).lineLimit(1).frame(width: 90, alignment: .leading)
+                        GeometryReader { proxy in
+                            Capsule().fill(Color(hex: agent.color, fallback: .accentColor).opacity(0.8))
+                                .frame(width: max(4, proxy.size.width * CGFloat(agent.usage.week.total) / CGFloat(peak)), height: 5)
+                                .frame(maxHeight: .infinity, alignment: .center)
+                        }
+                        .frame(height: 12)
+                        Text(Format.tokens(agent.usage.week.total)).font(.system(size: 12)).monospacedDigit().frame(width: 52, alignment: .trailing)
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -369,12 +379,26 @@ enum MenuBarTitle {
         }
     }
 
+    /// The parts in the order of the space, those of one provider together under a single icon.
+    static func groups(_ parts: [Part]) -> [[Part]] {
+        var groups: [[Part]] = []
+        for part in parts {
+            if let provider = part.provider, let index = groups.firstIndex(where: { $0.first?.provider == provider }) {
+                groups[index].append(part)
+            } else {
+                groups.append([part])
+            }
+        }
+        return groups
+    }
+
     static func attributed(_ parts: [Part]) -> NSAttributedString {
         let out = NSMutableAttributedString()
         let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-        for (index, part) in parts.enumerated() {
+        for (index, group) in groups(parts).enumerated() {
+            guard let first = group.first else { continue }
             out.append(NSAttributedString(string: index == 0 ? " " : "   ", attributes: [.font: font]))
-            if let provider = part.provider {
+            if let provider = first.provider {
                 if let icon = ProviderIcon.tinted(provider, color: .labelColor, size: 13) {
                     let attachment = NSTextAttachment()
                     attachment.image = icon
@@ -382,12 +406,39 @@ enum MenuBarTitle {
                     out.append(NSAttributedString(attachment: attachment))
                     out.append(NSAttributedString(string: "\u{2009}", attributes: [.font: font]))
                 } else {
-                    out.append(NSAttributedString(string: part.title + " ", attributes: [.font: font, .foregroundColor: NSColor.labelColor]))
+                    out.append(NSAttributedString(string: first.title + " ", attributes: [.font: font, .foregroundColor: NSColor.labelColor]))
                 }
             }
-            out.append(NSAttributedString(string: part.text, attributes: [.font: font, .foregroundColor: nsColor(part.level)]))
+            if group.count == 1 {
+                out.append(NSAttributedString(string: first.text, attributes: [.font: font, .foregroundColor: nsColor(first.level)]))
+            } else {
+                let attachment = NSTextAttachment()
+                let column = stacked(group)
+                attachment.image = column
+                attachment.bounds = NSRect(x: 0, y: -6, width: column.size.width, height: column.size.height)
+                out.append(NSAttributedString(attachment: attachment))
+            }
         }
         return out
+    }
+
+    /// Two or more readings of one provider, one above the other in a single column; drawn when shown, so the
+    /// colors follow a light or dark menu bar.
+    static func stacked(_ group: [Part]) -> NSImage {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+        let lineHeight: CGFloat = 9.5
+        let width = ceil(group.map { ($0.text as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0)
+        let height = lineHeight * CGFloat(group.count)
+        let image = NSImage(size: NSSize(width: width, height: height), flipped: true) { _ in
+            for (row, part) in group.enumerated() {
+                let text = NSAttributedString(string: part.text, attributes: [.font: font, .foregroundColor: nsColor(part.level)])
+                let size = text.size()
+                text.draw(at: NSPoint(x: width - size.width, y: CGFloat(row) * lineHeight + (lineHeight - size.height) / 2))
+            }
+            return true
+        }
+        image.accessibilityDescription = group.map { "\($0.title) \($0.text)" }.joined(separator: ", ")
+        return image
     }
 }
 

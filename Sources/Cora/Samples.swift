@@ -40,6 +40,14 @@ enum Samples {
         let gemini = Account(id: "sub_gemini", provider: "gemini", label: "Gemini", email: "seb@usecora.space", plan: "pro",
             usage: QuotaUsage(windows: [QuotaWindow(id: "gemini:daily", kind: .custom, usedPercent: 12, resetsAt: now.addingTimeInterval(9 * 3600), minutes: 1440)]), agentIds: [])
         let kimi = Account(id: "sub_kimi", provider: "kimi", label: "Kimi", email: "agents@usecora.space", usage: QuotaUsage(state: "unavailable", windows: [], issue: "AUTH_REQUIRED"), agentIds: ["ag_radix"])
+        let claudeBuzz = Account(id: "sub_claude_buzz", provider: "claude", label: "", email: "buzz@usecora.space", plan: "max",
+            usage: QuotaUsage(windows: [QuotaWindow(id: "five_hour", kind: .session, usedPercent: 30, resetsAt: now.addingTimeInterval(6700)), QuotaWindow(id: "seven_day", kind: .weekly, usedPercent: 12, resetsAt: resetWeek)]), agentIds: ["ag_ada"])
+        let grok = Account(id: "sub_grok", provider: "grok", label: "Grok", email: "seb@usecora.space",
+            usage: QuotaUsage(windows: [QuotaWindow(id: "grok:weekly", kind: .weekly, usedPercent: 1, resetsAt: now.addingTimeInterval(6 * 86400))]), agentIds: [])
+        let muse = Account(id: "sub_muse", provider: "muse", label: "Meta", email: "seb@usecora.space",
+            usage: QuotaUsage(windows: [QuotaWindow(id: "muse:weekly", kind: .weekly, usedPercent: 93, resetsAt: now.addingTimeInterval(4 * 86400 + 9 * 3600))]), agentIds: [])
+        let ollama = Account(id: "sub_ollama", provider: "ollama", label: "Ollama Cloud", email: "seb@usecora.space",
+            usage: QuotaUsage(windows: [QuotaWindow(id: "ollama:monthly", kind: .custom, usedPercent: 21, resetsAt: now.addingTimeInterval(25 * 86400), minutes: 43200)]), agentIds: [])
         let live = LiveTrace(traceId: "tr_buzz", channelId: "1572562024360054865", threadName: "App macOS: quote e reasoning dal vivo", link: "https://discord.com/channels/1/2",
                              startedAt: now.addingTimeInterval(-195), model: "claude/claude-opus-5-5", goal: "The macOS app builds and reads agents, quotas and live reasoning from the chosen space.", tokensIn: 184_200, tokensOut: 12_900, stepCount: 42, lastStep: thinking)
         let threads = [
@@ -52,7 +60,7 @@ enum Samples {
             Agent(id: "ag_nico", name: "Nico", color: "#e05aa5", model: "codex/gpt-6", state: .idle, accountIds: ["sub_codex"], usage: usage(18_000)),
             Agent(id: "ag_radix", name: "Radix", color: "#3fbf8f", enabled: false, model: "hermes/kimi-k3", state: .off, accountIds: ["sub_kimi"], usage: usage(4_000)),
         ]
-        return Snapshot(space: .init(name: "notseb", origin: "https://notseb.usecora.space"), user: .init(id: "u_seb", name: "Sebastiano", email: "seb@usecora.space", role: "owner"), accounts: [claude, codex, gemini, kimi], agents: agents)
+        return Snapshot(space: .init(name: "notseb", origin: "https://notseb.usecora.space"), user: .init(id: "u_seb", name: "Sebastiano", email: "seb@usecora.space", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama], agents: agents)
     }()
 
     @MainActor static func selection() -> LiveSelection {

@@ -67,7 +67,7 @@ enum CLI {
                     Swift.print("Disconnected from \(connection.host)")
                 } else { Swift.print("Not connected") }
             case .renderPreview(let directory):
-                try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_claude", "sub_codex", "sub_gemini"]), selection: Samples.selection(), directory: directory, steps: Samples.steps)
+                try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_codex", "sub_claude", "sub_claude_buzz"]), selection: Samples.selection(), directory: directory, steps: Samples.steps)
             case .renderLive(let directory):
                 let store = SpaceStore()
                 store.start()
@@ -154,6 +154,7 @@ enum CLI {
     @MainActor
     static func live<V: View>(_ view: V, appearance: NSAppearance.Name, to url: URL, label: String) throws {
         let controller = NSHostingController(rootView: view.background(Color(nsColor: .windowBackgroundColor)))
+        controller.sizingOptions = [.preferredContentSize]
         controller.view.appearance = NSAppearance(named: appearance)
         let window = NSWindow(contentViewController: controller)
         window.styleMask = [.borderless]

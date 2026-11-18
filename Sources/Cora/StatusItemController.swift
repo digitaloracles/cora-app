@@ -16,10 +16,12 @@ final class StatusItemController: NSObject {
         self.store = store
         super.init()
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: PopoverView(store: store, openAgent: { [weak self] id in
+        let controller = NSHostingController(rootView: PopoverView(store: store, openAgent: { [weak self] id in
             self?.popover.performClose(nil)
             self?.openWindow(id)
         }))
+        controller.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = controller
         item.button?.target = self
         item.button?.action = #selector(toggle)
         draw()
