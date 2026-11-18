@@ -39,7 +39,7 @@ final class StatusItemController: NSObject {
     func draw() {
         guard let button = item.button else { return }
         let working = store.snapshot?.working.count ?? 0
-        button.image = CoraMark.image(working: working > 0)
+        button.image = CoraMark.image(working: working)
         button.imagePosition = .imageLeading
         let parts = MenuBarTitle.parts(store)
         button.attributedTitle = MenuBarTitle.attributed(parts)

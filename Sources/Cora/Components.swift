@@ -456,7 +456,7 @@ struct MenuBarStrip: View {
     var body: some View {
         HStack(spacing: 0) {
             Spacer()
-            MenuBarButton(working: !(store.snapshot?.working.isEmpty ?? true), title: MenuBarTitle.attributed(MenuBarTitle.parts(store)))
+            MenuBarButton(working: store.snapshot?.working.count ?? 0, title: MenuBarTitle.attributed(MenuBarTitle.parts(store)))
                 .fixedSize()
                 .padding(.horizontal, 6)
                 .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.1)))
@@ -468,7 +468,7 @@ struct MenuBarStrip: View {
 }
 
 struct MenuBarButton: NSViewRepresentable {
-    let working: Bool
+    let working: Int
     let title: NSAttributedString
 
     func makeNSView(context: Context) -> NSButton {
@@ -484,10 +484,14 @@ struct MenuBarButton: NSViewRepresentable {
     }
 }
 
-/// The Cora mark for the menu bar: the app icon's sphere as a template image; a dot when agents are working.
+/// The Cora mark for the menu bar: the app icon's sphere as a template image, with the number of working agents small
+/// at its top right (nothing when nobody works).
 enum CoraMark {
-    static func image(working: Bool) -> NSImage {
-        let image = NSImage(size: NSSize(width: 20, height: 18), flipped: true) { _ in
+    static func image(working: Int) -> NSImage {
+        let badge = working > 0 ? NSAttributedString(string: "\(working)", attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 8.5, weight: .bold), .foregroundColor: NSColor.black]) : nil
+        let badgeWidth = badge.map { ceil($0.size().width) } ?? 0
+        let width = badge == nil ? 17 : max(20, 15.2 + badgeWidth)
+        let image = NSImage(size: NSSize(width: width, height: 18), flipped: true) { _ in
             NSColor.black.set()
             let ring = NSBezierPath(ovalIn: NSRect(x: 1.75, y: 2.25, width: 13.5, height: 13.5))
             ring.lineWidth = 1.5
@@ -498,7 +502,14 @@ enum CoraMark {
             seam.lineWidth = 1.3
             seam.lineCapStyle = .round
             seam.stroke()
-            if working { NSBezierPath(ovalIn: NSRect(x: 15.6, y: 0.6, width: 4.0, height: 4.0)).fill() }
+            if let badge {
+                // A knockout behind the number so it reads over the ring.
+                let box = NSRect(x: width - badgeWidth - 1.6, y: -0.6, width: badgeWidth + 1.6, height: 10.2)
+                NSGraphicsContext.current?.compositingOperation = .clear
+                NSBezierPath(roundedRect: box, xRadius: 3, yRadius: 3).fill()
+                NSGraphicsContext.current?.compositingOperation = .sourceOver
+                badge.draw(at: NSPoint(x: width - badgeWidth - 0.8, y: -1.2))
+            }
             return true
         }
         image.isTemplate = true
