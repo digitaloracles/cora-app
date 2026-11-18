@@ -5,7 +5,7 @@ import SwiftUI
 /// The app from the command line: connect, read, watch the live stream, render its views. Used by CI and for checks.
 enum CLI {
     enum Command {
-        case connect(String), print, watch(TimeInterval), disconnect, renderPreview(String), renderLive(String), version
+        case connect(String), print(String?), spaces, watch(TimeInterval), disconnect(String?), renderPreview(String), renderLive(String), version
     }
 
     static func command(_ arguments: [String]) -> Command? {
@@ -13,9 +13,10 @@ enum CLI {
         let value = arguments.dropFirst().first
         switch first {
         case "--connect": return value.map(Command.connect)
-        case "--print": return .print
+        case "--print": return .print(value)
+        case "--spaces": return .spaces
         case "--watch": return .watch(TimeInterval(value ?? "") ?? 30)
-        case "--disconnect": return .disconnect
+        case "--disconnect": return .disconnect(value)
         case "--render-preview": return value.map(Command.renderPreview)
         case "--render-live": return value.map(Command.renderLive)
         case "--version": return .version
@@ -36,8 +37,10 @@ enum CLI {
                 let connection = Connection(server: link.server, spaceName: link.server.host ?? "", userName: paired.user.name, email: paired.user.email, deviceId: paired.device.id)
                 try Storage.save(connection, token: paired.token)
                 Swift.print("Connected to \(connection.host) as \(paired.user.name) <\(paired.user.email)>, device \(paired.device.id)")
-            case .print:
-                let (client, _) = try connected()
+            case .spaces:
+                for connection in Storage.loadConnections() { Swift.print("\(connection.server.absoluteString) \(connection.spaceName) as \(connection.userName)") }
+            case .print(let space):
+                let (client, _) = try connected(space)
                 Swift.print(describe(try await client.snapshot()), terminator: "")
             case .watch(let seconds):
                 let (client, _) = try connected()
@@ -60,8 +63,8 @@ enum CLI {
                 }
                 try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
                 watcher.cancel()
-            case .disconnect:
-                if let connection = Storage.loadConnection() {
+            case .disconnect(let space):
+                if let connection = pick(space) {
                     if let token = Storage.token(for: connection) { try? await CoraClient(server: connection.server, token: token).signOut() }
                     Storage.forget(connection)
                     Swift.print("Disconnected from \(connection.host)")
@@ -69,7 +72,8 @@ enum CLI {
             case .renderPreview(let directory):
                 try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_codex", "sub_claude", "sub_claude_buzz", "sub_grok", "provider_deepseek"], history: Samples.history), selection: Samples.selection(), directory: directory, steps: Samples.steps)
             case .renderLive(let directory):
-                let store = SpaceStore()
+                guard let connection = Storage.loadConnection() else { throw ClientError.unauthorized("Not connected: run --connect with a link from the panel.") }
+                let store = SpaceStore(connection: connection)
                 store.start()
                 await store.refresh()
                 guard let snapshot = store.snapshot else { throw ClientError.invalidResponse }
@@ -89,8 +93,15 @@ enum CLI {
         }
     }
 
-    static func connected() throws -> (CoraClient, Connection) {
-        guard let connection = Storage.loadConnection() else { throw ClientError.unauthorized("Not connected: run --connect with a link from the panel.") }
+    /// The space named on the command line by its address or host (`127.0.0.1:4100`), or the first one.
+    static func pick(_ space: String?) -> Connection? {
+        let list = Storage.loadConnections()
+        guard let space, !space.isEmpty else { return list.first }
+        return list.first { $0.server.absoluteString == space || $0.host == space || $0.server.absoluteString.contains(space) }
+    }
+
+    static func connected(_ space: String? = nil) throws -> (CoraClient, Connection) {
+        guard let connection = pick(space) else { throw ClientError.unauthorized("Not connected: run --connect with a link from the panel.") }
         guard let token = Storage.token(for: connection) else { throw ClientError.unauthorized("No token in the Keychain for \(connection.host).") }
         return (CoraClient(server: connection.server, token: token), connection)
     }

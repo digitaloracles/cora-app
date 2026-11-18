@@ -32,6 +32,7 @@ public enum Storage {
     static var connectionsFile: URL { home.appendingPathComponent("connections.json") }
     /// Where versions up to 0.2.10 kept their single space; read once and moved into `connections.json`.
     static var legacyConnectionFile: URL { home.appendingPathComponent("connection.json") }
+    public static var pendingStateFile: URL { home.appendingPathComponent("pending-state") }
 
     /// Every space this Mac reads, in the order they were connected.
     public static func loadConnections() -> [Connection] {

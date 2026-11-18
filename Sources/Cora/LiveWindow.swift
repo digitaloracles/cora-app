@@ -23,7 +23,7 @@ struct LiveWindow: View {
             List(selection: $selection.agentId) {
                 if let spaces, spaces.stores.count > 1 {
                     Picker(selection: Binding(get: { spaces.stores.firstIndex { $0 === spaces.current } ?? 0 }, set: { spaces.select(spaces.stores[$0]) })) {
-                        ForEach(Array(spaces.stores.enumerated()), id: \.offset) { index, space in Text(space.title).tag(index) }
+                        ForEach(Array(spaces.stores.enumerated()), id: \.offset) { Text($0.element.title).tag($0.offset) }
                     } label: { EmptyView() }
                     .labelsHidden().pickerStyle(.menu).padding(.bottom, 4)
                 }

@@ -70,6 +70,34 @@ try {
   assert.match(print.stdout, /weekly: 16% left/);
   assert.ok(!print.stdout.includes("Hidden") && !print.stdout.includes("99"), "another owner's agent stays out");
 
+  // 2b. A second space on the same Mac: both stay connected, each read with its own token, and one can leave alone.
+  const other = await knowledgeWorld();
+  try {
+    other.app.store.createAgent({ name: "Nova", brainOwnerId: other.alice.user.id, tools: false, enabled: true, model: "claude/claude-opus-5-5" });
+    const second = await other.request(other.alice, "/api/app/pairings", { method: "POST", body: {} });
+    assert.equal(second.status, 201);
+    const otherServer = new URL(second.data.link).searchParams.get("server");
+    assert.ok(otherServer && otherServer !== new URL(pairing.data.link).searchParams.get("server"), "two spaces, two addresses");
+    assert.equal((await app(["--connect", second.data.link])).code, 0);
+    const spaces = await app(["--spaces"]);
+    note(`--spaces → ${spaces.stdout.trim()}`);
+    assert.equal(spaces.stdout.trim().split("\n").length, 2, "the first space stays when a second one connects");
+    const first = await app(["--print"]);
+    assert.match(first.stdout, /- Buzz \[idle\]/);
+    assert.ok(!first.stdout.includes("Nova"));
+    const otherPrint = await app(["--print", otherServer]);
+    note(`--print ${otherServer} → ${otherPrint.code}: ${otherPrint.stdout.split("\n").slice(0, 3).join(" | ")}`);
+    assert.equal(otherPrint.code, 0, otherPrint.stderr);
+    assert.match(otherPrint.stdout, /- Nova \[idle\]/);
+    assert.ok(!otherPrint.stdout.includes("Buzz"), "each space shows only its own agents");
+    assert.equal((await app(["--disconnect", otherServer])).code, 0);
+    assert.equal((await other.request(other.alice, "/api/app/devices")).data.devices.length, 0, "leaving a space signs that Mac out there");
+    assert.equal((await app(["--spaces"])).stdout.trim().split("\n").length, 1);
+    assert.equal((await app(["--print"])).code, 0, "the first space is still connected");
+  } finally {
+    await other.close();
+  }
+
   // 3. Live reasoning, step by step, while a turn runs.
   const live = traces.start({ agentId: buzz.id, kind: "chat", channelId: `web-${buzz.id}`, model: "claude/claude-opus-5-5" });
   live.goal = "Read the quotas and report what is left";

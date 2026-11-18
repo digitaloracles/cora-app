@@ -102,3 +102,7 @@
 "%@ · nothing" = "%@ · niente";
 "One square per day: point at one to see how much." = "Un quadrato per giorno: passaci sopra per vedere quanto.";
 "Nothing used yet." = "Ancora nessun consumo.";
+"Disconnect this Mac from %@" = "Scollega questo Mac da %@";
+"Add another space…" = "Aggiungi un altro spazio…";
+"Add another space" = "Aggiungi un altro spazio";
+"New space" = "Nuovo spazio";
