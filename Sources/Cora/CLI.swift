@@ -132,6 +132,9 @@ enum CLI {
                 let popover = PopoverView(store: store, tab: tab).environment(\.isStaticPreview, true)
                 try snapshot(popover, width: 360, height: nil, appearance: appearance, to: folder.appendingPathComponent("popover-\(tab.rawValue)-\(name).png"))
             }
+            for tab in PopoverTab.allCases {
+                try live(PopoverView(store: store, tab: tab), appearance: appearance, to: folder.appendingPathComponent("popover-live-\(tab.rawValue)-\(name).png"), label: "popover \(tab.rawValue) \(name)")
+            }
             try snapshot(MenuBarStrip(store: store), width: 520, height: 26, appearance: appearance, to: folder.appendingPathComponent("menubar-\(name).png"))
             if let id = selection.agentId, let agent = store.snapshot?.agent(id) {
                 let detail = AgentDetail(store: store, selection: selection, agent: agent).environment(\.isStaticPreview, true)
@@ -145,6 +148,25 @@ enum CLI {
             selection.agentId = agent
         }
         Swift.print("Rendered into \(folder.path)")
+    }
+
+    /// The popover as the status item shows it: an NSHostingController sized by SwiftUI, scroll view included.
+    @MainActor
+    static func live<V: View>(_ view: V, appearance: NSAppearance.Name, to url: URL, label: String) throws {
+        let controller = NSHostingController(rootView: view.background(Color(nsColor: .windowBackgroundColor)))
+        controller.view.appearance = NSAppearance(named: appearance)
+        let window = NSWindow(contentViewController: controller)
+        window.styleMask = [.borderless]
+        window.appearance = NSAppearance(named: appearance)
+        window.orderBack(nil)
+        for _ in 0..<10 { controller.view.layoutSubtreeIfNeeded(); RunLoop.main.run(until: Date().addingTimeInterval(0.1)) }
+        let hosting = controller.view
+        Swift.print("\(label): window \(Int(window.frame.width))x\(Int(window.frame.height)), fitting \(Int(hosting.fittingSize.width))x\(Int(hosting.fittingSize.height)), preferred \(Int(controller.preferredContentSize.width))x\(Int(controller.preferredContentSize.height)), sizingOptions \(controller.sizingOptions.rawValue)")
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { throw ClientError.invalidResponse }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { throw ClientError.invalidResponse }
+        try png.write(to: url)
+        window.orderOut(nil)
     }
 
     @MainActor
