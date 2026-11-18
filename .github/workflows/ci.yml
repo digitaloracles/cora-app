@@ -24,8 +24,35 @@ jobs:
         run: swift --version && sw_vers
       - name: Test
         run: swift test
+      - name: Signing keychain
+        if: github.event_name != 'pull_request'
+        env:
+          P12: ${{ secrets.CORA_APP_SIGNING_P12 }}
+          P12_PASSWORD: ${{ secrets.CORA_APP_SIGNING_P12_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          KC_PW="$(uuidgen)"
+          security create-keychain -p "$KC_PW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KC_PW" "$KC"
+          printf %s "$P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security import "$RUNNER_TEMP/signing.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/signing.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PW" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          security find-identity -p codesigning "$KC"
+          echo "CORA_SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
+          echo "CORA_SIGN_IDENTITY=2E8EB3A66ABA555B215BC2E43EFCEC16BC0F7298" >> "$GITHUB_ENV"
       - name: Build app
         run: scripts/build-app.sh
+      - name: Stable signature
+        if: github.event_name != 'pull_request'
+        run: |
+          codesign --verify --strict --verbose=2 build/Cora.app
+          codesign -dvv build/Cora.app 2>&1 | grep -E 'Authority|Identifier|Signature'
+          REQ="$(codesign -d -r- build/Cora.app 2>&1 | grep designated)"
+          echo "$REQ"
+          case "$REQ" in *'H"2e8eb3a66aba555b215bc2e43efcec16bc0f7298"'*) ;; *) echo "designated requirement is not pinned to the Cora signing certificate"; exit 1;; esac
       - name: Render previews
         run: build/Cora.app/Contents/MacOS/Cora --render-preview "$RUNNER_TEMP/previews"
       - uses: actions/checkout@v4
@@ -59,4 +86,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/Cora.zip" --title "Cora $GITHUB_REF_NAME" \
-            --notes "macOS 14 or later. Ad-hoc signed: on first launch right-click Cora.app and choose Open."
+            --notes "macOS 14 or later. Signed with the Cora signing certificate (not notarized): on first launch right-click Cora.app and choose Open."

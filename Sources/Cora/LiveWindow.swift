@@ -252,7 +252,7 @@ struct ThreadList: View {
             if agent.threads.isEmpty {
                 Text("No recent threads.").font(.system(size: 12)).foregroundStyle(.secondary)
             }
-            ForEach(agent.threads) { thread in
+            ForEach(agent.threads.sorted { ($0.lastAt ?? .distantPast) > ($1.lastAt ?? .distantPast) }) { thread in
                 VStack(alignment: .leading, spacing: 0) {
                     Button { toggle(thread) } label: { row(thread) }.buttonStyle(.plain)
                     if selection.thread?.id == thread.id { expanded }

@@ -21,6 +21,7 @@ struct PopoverView: View {
     @ObservedObject var store: SpaceStore
     var openAgent: (String?) -> Void = { _ in }
     @State var tab: PopoverTab = .agents
+    @State var threadQuery = ""
     @Environment(\.isStaticPreview) private var isStaticPreview
 
     var body: some View {
@@ -33,6 +34,7 @@ struct PopoverView: View {
                 }
                 .pickerStyle(.segmented).labelsHidden()
                 .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 2)
+                if tab == .threads { ThreadSearchField(query: $threadQuery).padding(.horizontal, 10).padding(.top, 8) }
                 scrolling {
                     VStack(alignment: .leading, spacing: 14) {
                         switch tab {
@@ -70,10 +72,11 @@ struct PopoverView: View {
     }
 
     @ViewBuilder func threads(_ snapshot: Snapshot) -> some View {
-        let list = ThreadEntry.all(snapshot)
-        if list.isEmpty { empty("No threads yet.") }
+        let all = ThreadEntry.all(snapshot)
+        let list = ThreadEntry.matching(all, threadQuery)
+        if all.isEmpty { empty("No threads yet.") } else if list.isEmpty { empty("No thread matches your search.") }
         ForEach(list) { entry in
-            Button { openAgent(entry.agents.first?.id) } label: { ThreadRow(entry: entry) }.buttonStyle(.plain)
+            Button { openAgent(entry.agents.first?.id) } label: { ThreadRow(entry: entry, avatarURL: { store.avatarURL($0) }) }.buttonStyle(.plain)
         }
     }
 
@@ -238,12 +241,61 @@ struct ThreadEntry: Identifiable {
                 }
             }
         }
-        return order.compactMap { entries[$0] }.sorted { ($0.thread.lastAt ?? .distantPast) > ($1.thread.lastAt ?? .distantPast) }
+        return order.compactMap { entries[$0] }.sorted(by: newestFirst)
+    }
+
+    static func newestFirst(_ a: ThreadEntry, _ b: ThreadEntry) -> Bool {
+        let (x, y) = (a.thread.lastAt ?? .distantPast, b.thread.lastAt ?? .distantPast)
+        return x != y ? x > y : a.thread.name.localizedStandardCompare(b.thread.name) == .orderedAscending
+    }
+
+    /// Every word of the query must appear in the thread's name, its agents or its latest reasoning.
+    static func matching(_ list: [ThreadEntry], _ query: String) -> [ThreadEntry] {
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !words.isEmpty else { return list }
+        return list.filter { entry in
+            let text = ([entry.thread.name, entry.thread.reasoning] + entry.agents.map(\.name)).joined(separator: " ")
+            return words.allSatisfy { text.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        }
+    }
+}
+
+struct ThreadSearchField: View {
+    @Binding var query: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(.secondary)
+            TextField(String(localized: "Search threads"), text: $query).textFieldStyle(.plain).font(.system(size: 12))
+            if !query.isEmpty {
+                Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                    .buttonStyle(.plain).help(String(localized: "Clear"))
+            }
+        }
+        .padding(.horizontal, 8).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.primary.opacity(0.06)))
+    }
+}
+
+/// The agents of a thread as small overlapping avatars.
+struct AvatarStack: View {
+    let agents: [Agent]
+    let url: (Agent) -> URL?
+    var size: CGFloat = 16
+
+    var body: some View {
+        HStack(spacing: -size * 0.3) {
+            ForEach(agents.prefix(5)) { agent in
+                AgentAvatar(agent: agent, url: url(agent), size: size, ring: false)
+                    .overlay(Circle().strokeBorder(Color(nsColor: .windowBackgroundColor), lineWidth: 1.5).padding(-1))
+            }
+        }
     }
 }
 
 struct ThreadRow: View {
     let entry: ThreadEntry
+    var avatarURL: (Agent) -> URL? = { _ in nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -253,8 +305,11 @@ struct ThreadRow: View {
                 Spacer(minLength: 4)
                 if let at = entry.thread.lastAt { Text(Format.ago(at)).font(.system(size: 10)).foregroundStyle(.secondary) }
             }
-            Text(([entry.agents.map(\.name).joined(separator: ", ")] + (tokens > 0 ? [Format.tokens(tokens) + " token"] : [])).joined(separator: " · "))
-                .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            HStack(spacing: 6) {
+                AvatarStack(agents: entry.agents, url: avatarURL)
+                Text(([entry.agents.map(\.name).joined(separator: ", ")] + (tokens > 0 ? [Format.tokens(tokens) + " token"] : [])).joined(separator: " · "))
+                    .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            }
             if !entry.thread.reasoning.isEmpty {
                 Text(entry.thread.reasoning.replacingOccurrences(of: "\n", with: " ")).font(.system(size: 11)).italic().foregroundStyle(.secondary).lineLimit(2)
             }

@@ -31,6 +31,7 @@ struct AgentAvatar: View {
     let agent: Agent
     let url: URL?
     var size: CGFloat = 28
+    var ring = true
     @Environment(\.isStaticPreview) private var isStaticPreview
 
     var body: some View {
@@ -49,7 +50,7 @@ struct AgentAvatar: View {
         }
         .frame(width: size, height: size)
         .overlay {
-            if agent.state == .working {
+            if ring && agent.state == .working {
                 Circle().strokeBorder(tint, lineWidth: 2).padding(-3)
             }
         }

@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Builds build/Cora.app (ad-hoc signed). --install copies it to ~/Applications and registers the cora:// links.
+# Builds build/Cora.app, signed with CORA_SIGN_IDENTITY (the stable Cora certificate, so Keychain access survives updates) or ad-hoc without it. --install copies it to ~/Applications and registers the cora:// links.
 set -euo pipefail
 
 ROOT="${0:A:h:h}"
@@ -23,7 +23,14 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
-codesign --force --sign - "$APP"
+if [[ -n "${CORA_SIGN_IDENTITY:-}" ]]; then
+  KEYCHAIN=()
+  [[ -n "${CORA_SIGN_KEYCHAIN:-}" ]] && KEYCHAIN=(--keychain "$CORA_SIGN_KEYCHAIN")
+  codesign --force --timestamp=none --sign "$CORA_SIGN_IDENTITY" "${KEYCHAIN[@]}" \
+    -r="designated => identifier \"space.usecora.app\" and certificate leaf = H\"2e8eb3a66aba555b215bc2e43efcec16bc0f7298\"" "$APP"
+else
+  codesign --force --sign - "$APP"
+fi
 echo "Built $APP"
 
 if [[ "${1:-}" == "--install" ]]; then
