@@ -142,8 +142,6 @@ struct SubscriptionRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
                         Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.tail)
-                        Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold)).foregroundStyle(.tertiary)
-                            .rotationEffect(.degrees(expanded ? 90 : 0))
                         Spacer(minLength: 6)
                         firstLine
                     }
@@ -215,15 +213,16 @@ struct WindowFigures: View {
     var body: some View {
         HStack(spacing: 5) {
             Text(window.tag()).font(.system(size: 10, weight: .semibold)).monospacedDigit().foregroundStyle(.secondary)
-                .padding(.horizontal, 4).frame(minWidth: 26).frame(height: 15)
+                .lineLimit(1).fixedSize().frame(width: 28, height: 15)
                 .background(Capsule().fill(Color.primary.opacity(0.07)))
-            Text(reset).font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
-                .frame(width: 44, alignment: .trailing)
-            LeftBar(remainingPercent: window.remainingPercent, color: window.level.color).frame(width: 40)
+            Text(reset).font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1).fixedSize()
+                .frame(width: 42, alignment: .trailing)
+            LeftBar(remainingPercent: window.remainingPercent, color: window.level.color).frame(width: 36)
             Text(Format.percent(window.remainingPercent)).font(.system(size: 12, weight: .semibold)).monospacedDigit()
                 .foregroundStyle(window.level == .normal ? Color.primary : window.level.color)
                 .frame(width: 34, alignment: .trailing)
         }
+        .fixedSize()
         .help(window.label + (window.resetsAt.map { " · " + String(localized: "Resets in \(Format.countdown(to: $0))") + " · " + $0.formatted(date: .abbreviated, time: .shortened) } ?? ""))
     }
 
@@ -282,7 +281,14 @@ struct SubscriptionDetail: View {
     func resetLine(_ window: QuotaWindow) -> String {
         guard let reset = window.resetsAt else { return String(localized: "No reset time") }
         if reset <= Date() { return String(localized: "Reset due: waiting for a new reading") }
-        return String(localized: "Resets in \(Format.countdown(to: reset))") + " · " + reset.formatted(date: .abbreviated, time: .shortened)
+        return String(localized: "Resets in \(Format.countdown(to: reset))") + " · " + Self.when(reset)
+    }
+
+    /// `17:22` today, `Sat 17:22` within a week, `Dec 17` further away.
+    static func when(_ date: Date) -> String {
+        if Calendar.current.isDateInToday(date) { return date.formatted(date: .omitted, time: .shortened) }
+        if date.timeIntervalSinceNow < 6 * 86_400 { return date.formatted(.dateTime.weekday(.abbreviated).hour().minute()) }
+        return date.formatted(.dateTime.day().month(.abbreviated))
     }
 
     var facts: [String] {
@@ -572,7 +578,7 @@ enum MenuBarTitle {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
         let tagFont = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
         let lineHeight: CGFloat = 9.5
-        let gap: CGFloat = 5
+        let gap: CGFloat = 7
         func columnLines(_ part: Part) -> [Line] { part.lines.isEmpty ? [Line(tag: "", value: part.text, level: part.level)] : part.lines }
         func size(_ text: String, _ font: NSFont) -> CGFloat { text.isEmpty ? 0 : ceil((text as NSString).size(withAttributes: [.font: font]).width) }
         // Subscriptions with a single figure each share one column, as before; with two limits each gets its own.
