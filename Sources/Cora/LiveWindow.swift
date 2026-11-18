@@ -105,29 +105,47 @@ struct UsageStrip: View {
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.05)))
     }
 
+    func turns(_ count: Int) -> String { count == 1 ? String(localized: "1 turn") : String(localized: "\(count) turns") }
+
     func figure(_ title: LocalizedStringKey, _ tokens: Tokens) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
             Text(Format.tokens(tokens.total)).font(.system(size: 17, weight: .semibold)).monospacedDigit()
-            Text("\(Format.tokens(tokens.tokensIn)) in · \(Format.tokens(tokens.tokensOut)) out · \(tokens.turns) turns")
-                .font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
+            Text("\(Format.tokens(tokens.tokensIn)) in · \(Format.tokens(tokens.tokensOut)) out · \(turns(tokens.turns))")
+                .font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit().fixedSize()
         }
     }
 }
 
-/// Tokens per day over the last 30 days.
+/// Tokens per day over the last 30 days, one slot per day whether or not the agent worked.
 struct DailyBars: View {
     let days: [DayTokens]
 
+    var slots: [(day: String, total: Int)] {
+        let totals = Dictionary(days.map { ($0.day, $0.total) }, uniquingKeysWith: +)
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let last = days.map(\.day).max().flatMap(formatter.date) ?? Date()
+        let end = max(last, Date())
+        return (0..<30).reversed().map { offset in
+            let day = formatter.string(from: Calendar(identifier: .gregorian).date(byAdding: .day, value: -offset, to: end)!)
+            return (day, totals[day] ?? 0)
+        }
+    }
+
     var body: some View {
-        let peak = max(1, days.map(\.total).max() ?? 1)
+        let slots = self.slots
+        let peak = max(1, slots.map(\.total).max() ?? 1)
         GeometryReader { proxy in
+            let width = max(2, (proxy.size.width - 29 * 2) / 30)
             HStack(alignment: .bottom, spacing: 2) {
-                ForEach(days.suffix(30)) { day in
+                ForEach(slots, id: \.day) { slot in
                     RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color.accentColor.opacity(0.75))
-                        .frame(height: max(2, proxy.size.height * CGFloat(day.total) / CGFloat(peak)))
-                        .help("\(day.day): \(Format.tokens(day.total))")
+                        .fill(slot.total == 0 ? Color.primary.opacity(0.09) : Color.accentColor.opacity(0.75))
+                        .frame(width: width, height: slot.total == 0 ? 2 : max(3, proxy.size.height * CGFloat(slot.total) / CGFloat(peak)))
+                        .help("\(slot.day): \(Format.tokens(slot.total))")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -141,6 +159,7 @@ struct LiveTurn: View {
     @ObservedObject var store: SpaceStore
     let live: LiveTrace
     let tint: Color
+    @Environment(\.isStaticPreview) private var isStaticPreview
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -162,6 +181,15 @@ struct LiveTurn: View {
                 Text(live.goal).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(3)
             }
             let steps = store.stepsFor(live.traceId)
+            if isStaticPreview {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(steps.suffix(8).enumerated()), id: \.offset) { _, step in StepRow(step: step) }
+                    if steps.isEmpty, let last = live.lastStep { StepRow(step: last) }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor).opacity(0.6)))
+            } else {
             ScrollViewReader { reader in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
@@ -174,6 +202,7 @@ struct LiveTurn: View {
                 .onChange(of: steps.count) { _, count in withAnimation(.easeOut(duration: 0.2)) { reader.scrollTo(min(count, 80) - 1, anchor: .bottom) } }
             }
             .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor).opacity(0.6)))
+            }
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint.opacity(0.5), lineWidth: 1))

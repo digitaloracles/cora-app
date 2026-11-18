@@ -15,7 +15,6 @@
 "%@ · %@ in 7 days" = "%@ · %@ in 7 giorni";
 "%@ left" = "%@ rimasto";
 "%@ tokens" = "%@ token";
-"%@ in · %@ out · %lld turns" = "%@ entrata · %@ uscita · %lld turni";
 "Idle" = "In attesa";
 "left" = "rimasto";
 "Limit" = "Limite";
@@ -58,3 +57,6 @@
 "Working" = "Al lavoro";
 "Write the address of your space, for example notseb.usecora.space." = "Scrivi l’indirizzo del tuo spazio, per esempio notseb.usecora.space.";
 "Used by %@" = "Usato da %@";
+"1 turn" = "1 turno";
+"%lld turns" = "%lld turni";
+"%@ in · %@ out · %@" = "%@ entrata · %@ uscita · %@";
