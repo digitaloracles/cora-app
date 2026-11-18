@@ -34,11 +34,19 @@ struct HeatLegend: View {
 /// size: a history wider than the space it has scrolls sideways and opens on the latest week.
 struct TokenHeatmap: View {
     let map: Heatmap
-    var cell: CGFloat = 13
+    /// The width it has: squares grow to fill it between `smallest` and `largest`, and scroll below `smallest`.
+    var fit: CGFloat = 0
+    var smallest: CGFloat = 10
+    var largest: CGFloat = 14
     var label: String = ""
     @State private var hovered: String?
 
     private let gap: CGFloat = 3
+
+    var cell: CGFloat {
+        guard fit > 0, !map.weeks.isEmpty else { return largest }
+        return min(largest, max(smallest, ((fit + gap) / CGFloat(map.weeks.count) - gap).rounded(.down)))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -127,6 +135,9 @@ struct UsageHeatmaps: View {
     let width: CGFloat
     var openAgent: (String) -> Void = { _ in }
 
+    /// One to three agents side by side, each at least 288 pt wide.
+    var columns: Int { max(1, min(3, Int((width + 12) / 300))) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
@@ -144,14 +155,13 @@ struct UsageHeatmaps: View {
                             Text(String(localized: "\(Format.tokens(history.total())) tokens")).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).monospacedDigit()
                         }
                         if let map = Heatmap(byDay: history.byDay(), today: history.today) {
-                            TokenHeatmap(map: map, cell: width >= 700 ? 14 : 12, label: String(localized: "One square per day: point at one to see how much."))
+                            TokenHeatmap(map: map, fit: width - 24, largest: 18, label: String(localized: "One square per day: point at one to see how much."))
                         } else {
                             empty
                         }
                     }
                 }
                 let agents = snapshot.agents.sorted { history.total(agentId: $0.id) > history.total(agentId: $1.id) }
-                let columns = max(1, min(3, Int((width + 12) / 300)))
                 Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                     ForEach(Array(stride(from: 0, to: agents.count, by: columns)), id: \.self) { start in
                         GridRow(alignment: .top) {
@@ -179,7 +189,7 @@ struct UsageHeatmaps: View {
                 }
                 .buttonStyle(.plain)
                 if let map = Heatmap(byDay: history.byDay(agentId: agent.id), today: history.today) {
-                    TokenHeatmap(map: map, cell: 11, label: Format.model(agent.model))
+                    TokenHeatmap(map: map, fit: (width - 12 * CGFloat(columns - 1)) / CGFloat(columns) - 24, largest: 14, label: Format.model(agent.model))
                 } else {
                     empty
                 }

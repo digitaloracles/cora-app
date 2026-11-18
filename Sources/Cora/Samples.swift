@@ -26,7 +26,7 @@ enum Samples {
         let today = Heatmap.dayKey(now, timeZone: .current)
         var rows: [UsageHistory.Row] = []
         for (offset, (agent, base)) in bases.enumerated() {
-            let span = 150 - offset * 35
+            let span = offset == 0 ? 365 : 150 - offset * 35
             for index in 0..<span {
                 let date = Calendar.current.date(byAdding: .day, value: index - span + 1, to: now)!
                 let weekday = Calendar.current.component(.weekday, from: date)
