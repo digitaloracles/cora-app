@@ -429,18 +429,18 @@ struct MenuBarButton: NSViewRepresentable {
 /// The Cora mark for the menu bar: the app icon's sphere as a template image; a dot when agents are working.
 enum CoraMark {
     static func image(working: Bool) -> NSImage {
-        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+        let image = NSImage(size: NSSize(width: 20, height: 18), flipped: true) { _ in
             NSColor.black.set()
-            let ring = NSBezierPath(ovalIn: NSRect(x: 2.25, y: 2.25, width: 13.5, height: 13.5))
+            let ring = NSBezierPath(ovalIn: NSRect(x: 1.75, y: 2.25, width: 13.5, height: 13.5))
             ring.lineWidth = 1.5
             ring.stroke()
             let seam = NSBezierPath()
-            seam.move(to: NSPoint(x: 2.6, y: 10.4))
-            seam.curve(to: NSPoint(x: 14.6, y: 5.0), controlPoint1: NSPoint(x: 6.5, y: 13.2), controlPoint2: NSPoint(x: 11.5, y: 10.6))
-            seam.lineWidth = 1.5
+            seam.move(to: NSPoint(x: 2.0, y: 10.6))
+            seam.curve(to: NSPoint(x: 14.4, y: 6.4), controlPoint1: NSPoint(x: 6.0, y: 12.0), controlPoint2: NSPoint(x: 10.5, y: 10.0))
+            seam.lineWidth = 1.3
             seam.lineCapStyle = .round
             seam.stroke()
-            if working { NSBezierPath(ovalIn: NSRect(x: 13.0, y: 0.5, width: 4.5, height: 4.5)).fill() }
+            if working { NSBezierPath(ovalIn: NSRect(x: 15.6, y: 0.6, width: 4.0, height: 4.0)).fill() }
             return true
         }
         image.isTemplate = true
