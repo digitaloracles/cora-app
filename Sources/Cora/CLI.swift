@@ -67,7 +67,7 @@ enum CLI {
                     Swift.print("Disconnected from \(connection.host)")
                 } else { Swift.print("Not connected") }
             case .renderPreview(let directory):
-                try render(store: SpaceStore(preview: Samples.snapshot), selection: Samples.selection(), directory: directory, steps: Samples.steps)
+                try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_claude", "sub_codex"]), selection: Samples.selection(), directory: directory, steps: Samples.steps)
             case .renderLive(let directory):
                 let store = SpaceStore()
                 store.start()
@@ -128,8 +128,11 @@ enum CLI {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for (traceId, list) in steps { for step in list { store.receive(ServerEvent.step(traceId: traceId, agentId: store.snapshot?.agents.first { $0.live.contains { $0.traceId == traceId } }?.id ?? "", step: step)) } }
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
-            let popover = PopoverView(store: store).environment(\.isStaticPreview, true)
-            try snapshot(popover, width: 360, height: nil, appearance: appearance, to: folder.appendingPathComponent("popover-\(name).png"))
+            for tab in PopoverTab.allCases {
+                let popover = PopoverView(store: store, tab: tab).environment(\.isStaticPreview, true)
+                try snapshot(popover, width: 360, height: nil, appearance: appearance, to: folder.appendingPathComponent("popover-\(tab.rawValue)-\(name).png"))
+            }
+            try snapshot(MenuBarStrip(store: store), width: 520, height: 26, appearance: appearance, to: folder.appendingPathComponent("menubar-\(name).png"))
             if let id = selection.agentId, let agent = store.snapshot?.agent(id) {
                 let detail = AgentDetail(store: store, selection: selection, agent: agent).environment(\.isStaticPreview, true)
                 try snapshot(detail, width: 760, height: nil, appearance: appearance, to: folder.appendingPathComponent("agent-\(name).png"))

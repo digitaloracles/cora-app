@@ -3,7 +3,7 @@ import Combine
 import CoraKit
 import SwiftUI
 
-/// The menu bar: how many agents are working and the tightest quota left; the popover opens on click.
+/// The menu bar: how many agents are working and the subscriptions the person pinned; the popover opens on click.
 @MainActor
 final class StatusItemController: NSObject {
     let store: SpaceStore
@@ -41,20 +41,9 @@ final class StatusItemController: NSObject {
         symbol?.isTemplate = true
         button.image = symbol
         button.imagePosition = .imageLeading
-        var parts: [String] = []
-        if working > 0 { parts.append("\(working)") }
-        if let tight = store.snapshot?.tightest { parts.append(Format.percent(tight.window.remainingPercent)) }
-        let text = parts.joined(separator: " · ")
-        let color: NSColor
-        switch store.snapshot?.tightest?.window.level {
-        case .critical?: color = .systemRed
-        case .warning?: color = .systemOrange
-        default: color = .labelColor
-        }
-        button.attributedTitle = NSAttributedString(string: text.isEmpty ? "" : " " + text, attributes: [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium), .foregroundColor: color,
-        ])
+        let parts = MenuBarTitle.parts(store)
+        button.attributedTitle = MenuBarTitle.attributed(parts)
         button.alphaValue = store.phase == .ready ? 1 : 0.55
-        button.toolTip = store.snapshot.map { "\($0.space.name): \(working) working" } ?? "Cora"
+        button.toolTip = store.snapshot.map { snapshot in ([String(localized: "\(snapshot.space.name): \(working) working")] + snapshot.pinned(store.pins).map(\.text)).joined(separator: "\n") } ?? "Cora"
     }
 }

@@ -114,3 +114,48 @@ import Testing
         #expect(Format.model("claude/claude-opus-5-5") == "claude-opus-5-5")
     }
 }
+
+@Suite(.serialized) struct PinTests {
+    func fixture() throws -> Snapshot {
+        let url = try #require(Bundle.module.url(forResource: "snapshot", withExtension: "json", subdirectory: "Fixtures"))
+        return try JSONDecoder().decode(Snapshot.self, from: Data(contentsOf: url))
+    }
+
+    @Test func onlyPinnedSubscriptionsReachTheMenuBar() throws {
+        let snapshot = try fixture()
+        #expect(snapshot.pinned([]).isEmpty, "nothing pinned shows no quota at all")
+        let ids = snapshot.accounts.map(\.id)
+        let one = snapshot.pinned([ids[0]])
+        #expect(one.count == 1)
+        #expect(one[0].accountId == ids[0])
+        #expect(one[0].text == "\(Providers.name(snapshot.accounts[0].provider)) 19%", "the tightest account-wide window of that subscription")
+        #expect(snapshot.pinned(["gone", ids[1]]).map(\.accountId) == [ids[1]], "a subscription removed from the space drops out")
+        #expect(snapshot.pinned([ids[1], ids[0]]).map(\.accountId) == ids, "the order of the space, not of the clicks")
+        let unread = try #require(snapshot.pinned([ids[1]]).first)
+        if snapshot.accounts[1].tightestWindow == nil { #expect(unread.text.hasSuffix("–")) }
+    }
+
+    @Test func twoSubscriptionsOfOneProviderKeepTheirLabels() {
+        let usage = QuotaUsage(windows: [QuotaWindow(id: "w", kind: .weekly, usedPercent: 40, resetsAt: nil)])
+        let snapshot = Snapshot(space: .init(name: "s", origin: "https://s.usecora.space"), user: .init(id: "u", name: "U", email: "u@x", role: "owner"),
+                                accounts: [Account(id: "a", provider: "claude", label: "Max Seb", usage: usage, agentIds: []),
+                                           Account(id: "b", provider: "claude", label: "", email: "team@usecora.space", usage: usage, agentIds: []),
+                                           Account(id: "c", provider: "codex", label: "ChatGPT Pro", usage: nil, agentIds: [])], agents: [])
+        #expect(snapshot.pinned(["a", "b", "c"]).map(\.text) == ["Claude · Max Seb 60%", "Claude · team 60%", "Codex –"])
+    }
+
+    @Test func pinsPersistPerSpace() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("cora-pins-\(UUID().uuidString)")
+        setenv("CORA_APP_HOME", home.path, 1)
+        defer { unsetenv("CORA_APP_HOME"); try? FileManager.default.removeItem(at: home) }
+        let notseb = URL(string: "https://notseb.usecora.space")!, other = URL(string: "https://dopamina.usecora.space")!
+        #expect(Pins.load(server: notseb).isEmpty)
+        try Pins.save(["sub_claude", "sub_codex"], server: notseb)
+        try Pins.save(["sub_x"], server: other)
+        #expect(Pins.load(server: notseb) == ["sub_claude", "sub_codex"])
+        #expect(Pins.load(server: other) == ["sub_x"])
+        try Pins.save([], server: notseb)
+        #expect(Pins.load(server: notseb).isEmpty)
+        #expect(Pins.load(server: other) == ["sub_x"])
+    }
+}

@@ -1,10 +1,24 @@
 import CoraKit
 import SwiftUI
 
-/// The menu bar popover: the space, every agent with what it is doing now, then the accounts and their quotas.
+enum PopoverTab: String, CaseIterable, Identifiable {
+    case agents, tokens, threads
+    var id: String { rawValue }
+    var title: LocalizedStringKey {
+        switch self {
+        case .agents: return "Agents"
+        case .tokens: return "Tokens"
+        case .threads: return "Threads"
+        }
+    }
+}
+
+/// The menu bar popover: the space, then three tabs. Agents with what they do now; Tokens with the subscriptions
+/// (each one can be pinned to the menu bar) and each agent's usage; Threads with the latest reasoning of each thread.
 struct PopoverView: View {
     @ObservedObject var store: SpaceStore
     var openAgent: (String?) -> Void = { _ in }
+    @State var tab: PopoverTab = .agents
     @Environment(\.isStaticPreview) private var isStaticPreview
 
     var body: some View {
@@ -12,24 +26,17 @@ struct PopoverView: View {
             header
             Divider()
             if let snapshot = store.snapshot {
+                Picker("", selection: $tab) {
+                    ForEach(PopoverTab.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented).labelsHidden()
+                .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 2)
                 scrolling {
                     VStack(alignment: .leading, spacing: 14) {
-                        section("Agents") {
-                            if snapshot.agents.isEmpty {
-                                Text("No agents in this space for your account.").font(.system(size: 11)).foregroundStyle(.secondary)
-                            }
-                            ForEach(snapshot.agents) { agent in
-                                Button { openAgent(agent.id) } label: { AgentRow(agent: agent, url: store.avatarURL(agent), live: liveLine(agent)) }
-                                    .buttonStyle(.plain)
-                            }
-                        }
-                        section("Quotas") {
-                            if snapshot.accounts.isEmpty {
-                                Text("No subscription is linked to your agents.").font(.system(size: 11)).foregroundStyle(.secondary)
-                            }
-                            ForEach(snapshot.accounts) { account in
-                                AccountCard(account: account, agents: snapshot.agents.filter { account.agentIds.contains($0.id) })
-                            }
+                        switch tab {
+                        case .agents: agents(snapshot)
+                        case .tokens: tokens(snapshot)
+                        case .threads: threads(snapshot)
                         }
                     }
                     .padding(10)
@@ -39,6 +46,65 @@ struct PopoverView: View {
             }
         }
         .frame(width: 360)
+    }
+
+    @ViewBuilder func agents(_ snapshot: Snapshot) -> some View {
+        if snapshot.agents.isEmpty {
+            empty("No agents in this space for your account.")
+        }
+        ForEach(snapshot.agents) { agent in
+            Button { openAgent(agent.id) } label: { AgentRow(agent: agent, url: store.avatarURL(agent), live: liveLine(agent)) }
+                .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder func tokens(_ snapshot: Snapshot) -> some View {
+        section("Subscriptions") {
+            if snapshot.accounts.isEmpty {
+                empty("No subscription is linked to your agents.")
+            } else {
+                Text("Pin the subscriptions you want to see in the menu bar.").font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
+            }
+            ForEach(snapshot.accounts) { account in
+                AccountCard(account: account, agents: snapshot.agents.filter { account.agentIds.contains($0.id) },
+                            pinned: store.isPinned(account), onPin: { store.togglePin(account) })
+            }
+        }
+        section("Tokens by agent") {
+            HStack {
+                Spacer()
+                ForEach(["Today", "7 days", "30 days"], id: \.self) { Text(LocalizedStringKey($0)).frame(width: 58, alignment: .trailing) }
+            }
+            .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary).padding(.horizontal, 10)
+            ForEach(snapshot.agents.sorted { $0.usage.month.total > $1.usage.month.total }) { agent in
+                Button { openAgent(agent.id) } label: {
+                    HStack(spacing: 8) {
+                        AgentAvatar(agent: agent, url: store.avatarURL(agent), size: 20)
+                        Text(agent.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                        Spacer(minLength: 4)
+                        ForEach(Array([agent.usage.today, agent.usage.week, agent.usage.month].enumerated()), id: \.offset) { _, value in
+                            Text(Format.tokens(value.total)).font(.system(size: 12)).monospacedDigit().frame(width: 58, alignment: .trailing)
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.035)))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder func threads(_ snapshot: Snapshot) -> some View {
+        let list = ThreadEntry.all(snapshot)
+        if list.isEmpty { empty("No threads yet.") }
+        ForEach(list) { entry in
+            Button { openAgent(entry.agents.first?.id) } label: { ThreadRow(entry: entry) }.buttonStyle(.plain)
+        }
+    }
+
+    func empty(_ text: LocalizedStringKey) -> some View {
+        Text(text).font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
     }
 
     /// A static render has no scroll view: it shows the whole list.
@@ -159,4 +225,53 @@ struct ConnectPanel: View {
             Text("Read-only: the app never changes your agents or settings.").font(.system(size: 10)).foregroundStyle(.tertiary)
         }
     }
+}
+
+/// One thread with the agents that work in it, newest first.
+struct ThreadEntry: Identifiable {
+    var thread: ThreadInfo
+    var agents: [Agent]
+    var id: String { thread.id }
+
+    static func all(_ snapshot: Snapshot) -> [ThreadEntry] {
+        var order: [String] = [], entries: [String: ThreadEntry] = [:]
+        for agent in snapshot.agents {
+            for thread in agent.threads {
+                if var entry = entries[thread.id] {
+                    entry.agents.append(agent)
+                    if (thread.lastAt ?? .distantPast) > (entry.thread.lastAt ?? .distantPast) { entry.thread = thread }
+                    entries[thread.id] = entry
+                } else {
+                    order.append(thread.id); entries[thread.id] = ThreadEntry(thread: thread, agents: [agent])
+                }
+            }
+        }
+        return order.compactMap { entries[$0] }.sorted { ($0.thread.lastAt ?? .distantPast) > ($1.thread.lastAt ?? .distantPast) }
+    }
+}
+
+struct ThreadRow: View {
+    let entry: ThreadEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Circle().fill(active ? Color.green : Color.secondary.opacity(0.35)).frame(width: 6, height: 6)
+                Text(entry.thread.name.isEmpty ? entry.thread.id : entry.thread.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                Spacer(minLength: 4)
+                if let at = entry.thread.lastAt { Text(Format.ago(at)).font(.system(size: 10)).foregroundStyle(.secondary) }
+            }
+            Text(entry.agents.map(\.name).joined(separator: ", ") + " · " + Format.tokens(entry.thread.tokensIn + entry.thread.tokensOut) + " token")
+                .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            if !entry.thread.reasoning.isEmpty {
+                Text(entry.thread.reasoning.replacingOccurrences(of: "\n", with: " ")).font(.system(size: 11)).italic().foregroundStyle(.secondary).lineLimit(2)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(active ? 0.07 : 0.035)))
+        .contentShape(Rectangle())
+    }
+
+    var active: Bool { entry.thread.status == "active" }
 }

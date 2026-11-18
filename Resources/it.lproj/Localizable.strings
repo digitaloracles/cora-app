@@ -60,3 +60,13 @@
 "1 turn" = "1 turno";
 "%lld turns" = "%lld turni";
 "%@ in · %@ out · %@" = "%@ entrata · %@ uscita · %@";
+"Tokens" = "Token";
+"Subscriptions" = "Abbonamenti";
+"Pin the subscriptions you want to see in the menu bar." = "Metti in alto gli abbonamenti che vuoi vedere nella barra dei menu.";
+"In the menu bar" = "In alto";
+"Pin" = "Metti in alto";
+"Remove from the menu bar" = "Togli dalla barra dei menu";
+"Show this subscription in the menu bar" = "Mostra questo abbonamento nella barra dei menu";
+"Tokens by agent" = "Token per agente";
+"No threads yet." = "Ancora nessun thread.";
+"%@: %lld working" = "%1$@: %2$lld al lavoro";

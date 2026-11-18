@@ -15,6 +15,8 @@ final class SpaceStore: ObservableObject {
     @Published private(set) var steps: [String: [Step]] = [:]
     @Published private(set) var traces: [String: TraceDetail] = [:]
     @Published var spaceInput = "notseb.usecora.space"
+    /// The subscriptions shown in the menu bar, chosen in the popover and kept on this Mac per space.
+    @Published private(set) var pins: [String] = []
 
     private(set) var client: CoraClient?
     private var streamTask: Task<Void, Never>?
@@ -22,7 +24,8 @@ final class SpaceStore: ObservableObject {
     private var pendingRefresh: Task<Void, Never>?
     private let maxSteps = 300
 
-    init(preview: Snapshot? = nil) {
+    init(preview: Snapshot? = nil, pins: [String] = []) {
+        self.pins = pins
         if let preview {
             snapshot = preview
             phase = .ready
@@ -44,6 +47,7 @@ final class SpaceStore: ObservableObject {
 
     private func attach(_ connection: Connection, token: String) {
         self.connection = connection
+        pins = Pins.load(server: connection.server)
         client = CoraClient(server: connection.server, token: token)
         spaceInput = connection.host
         phase = snapshot == nil ? .connecting : .ready
@@ -214,6 +218,14 @@ final class SpaceStore: ObservableObject {
     func loadThread(_ id: String) async -> ThreadDetail? {
         guard let client else { return nil }
         return try? await client.thread(id)
+    }
+
+    func isPinned(_ account: Account) -> Bool { pins.contains(account.id) }
+
+    func togglePin(_ account: Account) {
+        if let index = pins.firstIndex(of: account.id) { pins.remove(at: index) } else { pins.append(account.id) }
+        guard let server = connection?.server, connection?.deviceId != "preview" else { return }
+        try? Pins.save(pins, server: server)
     }
 
     func stepsFor(_ traceId: String) -> [Step] { steps[traceId] ?? traces[traceId]?.steps ?? [] }

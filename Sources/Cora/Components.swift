@@ -1,3 +1,4 @@
+import AppKit
 import CoraKit
 import SwiftUI
 
@@ -140,6 +141,8 @@ struct WindowRow: View {
 struct AccountCard: View {
     let account: Account
     let agents: [Agent]
+    var pinned = false
+    var onPin: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -152,6 +155,17 @@ struct AccountCard: View {
                 }
                 Spacer()
                 if account.server { Image(systemName: "server.rack").font(.system(size: 10)).foregroundStyle(.secondary).help(String(localized: "Account of the server")) }
+                if let onPin {
+                    Button(action: onPin) {
+                        Label(pinned ? String(localized: "In the menu bar") : String(localized: "Pin"), systemImage: pinned ? "pin.fill" : "pin")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(pinned ? Color.accentColor : Color.secondary)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Capsule().fill(pinned ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.06)))
+                    }
+                    .buttonStyle(.plain)
+                    .help(pinned ? String(localized: "Remove from the menu bar") : String(localized: "Show this subscription in the menu bar"))
+                }
             }
             if !account.email.isEmpty || !account.label.isEmpty {
                 Text(account.email.isEmpty ? account.label : account.email).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
@@ -171,6 +185,7 @@ struct AccountCard: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.05)))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(pinned ? Color.accentColor.opacity(0.45) : .clear, lineWidth: 1))
     }
 
     var issue: String {
@@ -231,5 +246,56 @@ struct StepRow: View {
         case .text: return .green
         default: return .secondary
         }
+    }
+}
+
+/// What the menu bar shows next to the icon: the working agents, then each pinned subscription in its color.
+enum MenuBarTitle {
+    struct Part: Hashable { var text: String; var level: QuotaWindow.Level? }
+
+    @MainActor static func parts(_ store: SpaceStore) -> [Part] {
+        guard let snapshot = store.snapshot else { return [] }
+        var parts: [Part] = []
+        if !snapshot.working.isEmpty { parts.append(Part(text: "\(snapshot.working.count)", level: nil)) }
+        parts += snapshot.pinned(store.pins).map { Part(text: $0.text, level: $0.window?.level) }
+        return parts
+    }
+
+    static func nsColor(_ level: QuotaWindow.Level?) -> NSColor {
+        switch level {
+        case .critical?: return .systemRed
+        case .warning?: return .systemOrange
+        default: return .labelColor
+        }
+    }
+
+    static func attributed(_ parts: [Part]) -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        for (index, part) in parts.enumerated() {
+            out.append(NSAttributedString(string: index == 0 ? " " : "  ·  ", attributes: [.font: font, .foregroundColor: NSColor.tertiaryLabelColor]))
+            out.append(NSAttributedString(string: part.text, attributes: [.font: font, .foregroundColor: nsColor(part.level)]))
+        }
+        return out
+    }
+}
+
+/// The menu bar item drawn as SwiftUI, for screenshots: same icon, same parts, same colors.
+struct MenuBarStrip: View {
+    @ObservedObject var store: SpaceStore
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Spacer()
+            HStack(spacing: 4) {
+                Image(systemName: (store.snapshot?.working.isEmpty ?? true) ? "person.2.wave.2" : "person.2.wave.2.fill").font(.system(size: 13))
+                Text(AttributedString(MenuBarTitle.attributed(MenuBarTitle.parts(store))))
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.1)))
+            Image(systemName: "wifi").font(.system(size: 13)).padding(.leading, 14).foregroundStyle(.secondary)
+            Text("12:34").font(.system(size: 13)).padding(.leading, 12).padding(.trailing, 12).foregroundStyle(.secondary)
+        }
+        .frame(height: 26)
     }
 }
