@@ -71,3 +71,9 @@
 "No threads yet." = "Ancora nessun thread.";
 "%@: %lld working" = "%1$@: %2$lld al lavoro";
 "No agent uses it" = "Nessun agente la usa";
+"Pinned ones appear in the menu bar." = "Quelli con la puntina compaiono nella barra dei menu.";
+"Tokens, last 7 days" = "Token, ultimi 7 giorni";
+"No tokens used in the last 7 days." = "Nessun token usato negli ultimi 7 giorni.";
+"Sign in again" = "Accedi di nuovo";
+"Reading…" = "Leggo…";
+"No reading" = "Nessuna lettura";

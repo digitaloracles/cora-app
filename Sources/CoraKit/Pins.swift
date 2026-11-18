@@ -36,13 +36,17 @@ extension Snapshot {
     /// The pinned subscriptions in the order of the space, named by provider, with the label when two share one.
     public func pinned(_ ids: [String]) -> [PinnedQuota] {
         let chosen = accounts.filter { ids.contains($0.id) }
-        let providers = Dictionary(grouping: chosen, by: \.provider)
         return chosen.map { account in
-            let shared = (providers[account.provider]?.count ?? 0) > 1
-            let named = !account.label.isEmpty && account.label != Providers.name(account.provider)
-            let detail = named ? account.label : account.email.split(separator: "@").first.map(String.init) ?? account.id
-            let title = shared && detail != Providers.name(account.provider) ? "\(Providers.name(account.provider)) · \(detail)" : Providers.name(account.provider)
-            return PinnedQuota(accountId: account.id, provider: account.provider, title: title, window: account.tightestWindow)
+            PinnedQuota(accountId: account.id, provider: account.provider, title: title(of: account, among: chosen), window: account.tightestWindow)
         }
+    }
+
+    /// The provider's name, with the label or the mailbox when another subscription in `list` has the same provider.
+    public func title(of account: Account, among list: [Account]? = nil) -> String {
+        let shared = (list ?? accounts).filter { $0.provider == account.provider }.count > 1
+        let name = Providers.name(account.provider)
+        let named = !account.label.isEmpty && account.label != name
+        let detail = named ? account.label : account.email.split(separator: "@").first.map(String.init) ?? account.id
+        return shared && detail != name ? "\(name) · \(detail)" : name
     }
 }

@@ -105,106 +105,170 @@ struct UsageBar: View {
     }
 }
 
-struct WindowRow: View {
-    let window: QuotaWindow
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(label).font(.system(size: 12))
-                Spacer()
-                Text(Format.percent(window.remainingPercent)).font(.system(size: 12, weight: .semibold)).monospacedDigit()
-                Text("left").font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            UsageBar(usedPercent: window.usedPercent, color: window.level.color)
-            if let reset = window.resetsAt {
-                Text("Resets in \(Format.countdown(to: reset))")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .help(reset.formatted(date: .abbreviated, time: .shortened))
-            }
-        }
-    }
-
+extension QuotaWindow {
+    /// `Weekly`, `5-hour session`: what the window is, for the reset line.
     var label: String {
         let base: String
-        switch window.kind {
+        switch kind {
         case .session: base = String(localized: "5-hour session")
         case .weekly: base = String(localized: "Weekly")
         case .monthly: base = String(localized: "Monthly")
-        case .custom: base = window.minutes.map { String(localized: "\($0 / 60)-hour window") } ?? String(localized: "Limit")
+        case .custom: base = minutes.map { String(localized: "\($0 / 60)-hour window") } ?? String(localized: "Limit")
         }
-        return window.group.isEmpty ? base : "\(base) · \(window.group)"
+        return group.isEmpty ? base : "\(base) · \(group)"
     }
 }
 
-/// One account the agents run on: its windows, and who uses it.
-struct AccountCard: View {
+/// One subscription on one line: provider mark and name, when its tightest window resets, what is left, the pin.
+struct SubscriptionRow: View {
     let account: Account
-    let agents: [Agent]
+    let title: String
     var pinned = false
     var onPin: (() -> Void)?
-    var avatarURL: (Agent) -> URL? = { _ in nil }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Text(Providers.name(account.provider)).font(.system(size: 13, weight: .semibold))
-                if !account.plan.isEmpty {
-                    Text(account.plan.capitalized).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.07)))
+        HStack(spacing: 8) {
+            ProviderMark(provider: account.provider, size: 14)
+            Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.tail)
+            Spacer(minLength: 6)
+            if let window = account.tightestWindow {
+                if let reset = window.resetsAt {
+                    Text(Format.countdown(to: reset)).font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
+                        .help("\(window.label) · " + String(localized: "Resets in \(Format.countdown(to: reset))") + " · " + reset.formatted(date: .abbreviated, time: .shortened))
                 }
-                Spacer()
-                if account.server { Image(systemName: "server.rack").font(.system(size: 10)).foregroundStyle(.secondary).help(String(localized: "Account of the server")) }
-                if let onPin {
-                    Button(action: onPin) {
-                        Label(pinned ? String(localized: "In the menu bar") : String(localized: "Pin"), systemImage: pinned ? "pin.fill" : "pin")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(pinned ? Color.accentColor : Color.secondary)
-                            .padding(.horizontal, 7).padding(.vertical, 3)
-                            .background(Capsule().fill(pinned ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.06)))
-                    }
-                    .buttonStyle(.plain)
-                    .help(pinned ? String(localized: "Remove from the menu bar") : String(localized: "Show this subscription in the menu bar"))
-                }
-            }
-            if !account.email.isEmpty || !account.label.isEmpty {
-                Text(account.email.isEmpty ? account.label : account.email).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-            }
-            let windows = account.usage?.windows ?? []
-            if windows.isEmpty {
-                Label(issue, systemImage: "exclamationmark.circle").font(.system(size: 11)).foregroundStyle(.secondary)
+                LeftBar(remainingPercent: window.remainingPercent, color: window.level.color).frame(width: 56)
+                Text(Format.percent(window.remainingPercent)).font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                    .foregroundStyle(window.level == .normal ? Color.primary : window.level.color)
+                    .frame(width: 36, alignment: .trailing)
             } else {
-                ForEach(windows) { WindowRow(window: $0) }
-                    .opacity(account.usage?.stale == true ? 0.55 : 1)
+                Text(issue).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                Text("–").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary).frame(width: 36, alignment: .trailing)
             }
-            if agents.isEmpty {
-                Text("No agent uses it").font(.system(size: 11)).foregroundStyle(.tertiary)
-            } else {
-                HStack(spacing: 5) {
-                    ForEach(agents) { agent in
-                        AgentAvatar(agent: agent, url: avatarURL(agent), size: 20)
-                            .contentShape(Circle())
-                            .help(agent.name)
-                    }
+            if let onPin {
+                Button(action: onPin) {
+                    Image(systemName: pinned ? "pin.fill" : "pin")
+                        .font(.system(size: 11))
+                        .foregroundStyle(pinned ? Color.accentColor : Color.secondary.opacity(0.7))
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text("Used by \(agents.map(\.name).joined(separator: ", "))"))
+                .buttonStyle(.plain)
+                .help(pinned ? String(localized: "Remove from the menu bar") : String(localized: "Show this subscription in the menu bar"))
+                .accessibilityLabel(Text(pinned ? "Remove from the menu bar" : "Show this subscription in the menu bar"))
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.05)))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(pinned ? Color.accentColor.opacity(0.45) : .clear, lineWidth: 1))
+        .opacity(account.usage?.stale == true ? 0.6 : 1)
+        .padding(.leading, 8).padding(.trailing, 4).padding(.vertical, 5)
     }
 
+    /// Instead of the bar when there is no reading.
     var issue: String {
         switch account.usage?.issue ?? account.usage?.state ?? "" {
-        case "AUTH_REQUIRED": return String(localized: "Sign in again from the panel")
-        case "loading", "connecting": return String(localized: "Reading the quota…")
-        case "": return String(localized: "No quota reading yet")
-        default: return String(localized: "Quota not available right now")
+        case "AUTH_REQUIRED": return String(localized: "Sign in again")
+        case "loading", "connecting": return String(localized: "Reading…")
+        default: return String(localized: "No reading")
         }
+    }
+}
+
+/// What is left of a window: full when untouched, empty at the limit.
+struct LeftBar: View {
+    let remainingPercent: Double
+    let color: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.09))
+                Capsule().fill(color)
+                    .frame(width: remainingPercent <= 0 ? 0 : max(5, proxy.size.width * min(1, remainingPercent / 100)))
+            }
+        }
+        .frame(height: 5)
+    }
+}
+
+/// The provider's mark in the text color, or a neutral dot when the app has no mark for it.
+struct ProviderMark: View {
+    let provider: String
+    var size: CGFloat = 16
+
+    var body: some View {
+        Group {
+            if let image = ProviderIcon.template(provider) {
+                Image(nsImage: image).resizable().renderingMode(.template).interpolation(.high).scaledToFit()
+            } else {
+                Image(systemName: "circle.dashed").resizable().scaledToFit()
+            }
+        }
+        .frame(width: size, height: size)
+        .foregroundStyle(.primary)
+        .accessibilityLabel(Text(Providers.name(provider)))
+    }
+}
+
+/// The Tokens page, the same in the popover and in the window: the subscriptions with their pin, then how many
+/// tokens each agent used in the last 7 days.
+struct TokensSummary: View {
+    @ObservedObject var store: SpaceStore
+    let snapshot: Snapshot
+    var openAgent: (String) -> Void = { _ in }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                heading(Text("Subscriptions"), trailing: nil)
+                if snapshot.accounts.isEmpty {
+                    Text("No subscription is linked to your agents.").font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
+                }
+                if !snapshot.accounts.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(Array(snapshot.accounts.enumerated()), id: \.element.id) { index, account in
+                            if index > 0 { Divider().padding(.leading, 30) }
+                            SubscriptionRow(account: account, title: snapshot.title(of: account), pinned: store.isPinned(account), onPin: { store.togglePin(account) })
+                        }
+                    }
+                    .padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
+                    Text("Pinned ones appear in the menu bar.").font(.system(size: 10)).foregroundStyle(.tertiary).padding(.horizontal, 2)
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                let agents = snapshot.agents.filter { $0.usage.week.total > 0 }.sorted { $0.usage.week.total > $1.usage.week.total }
+                let peak = max(1, agents.first?.usage.week.total ?? 1)
+                heading(Text("Tokens, last 7 days"), trailing: Format.tokens(snapshot.agents.map(\.usage.week.total).reduce(0, +)))
+                if agents.isEmpty {
+                    Text("No tokens used in the last 7 days.").font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
+                }
+                ForEach(agents) { agent in
+                    Button { openAgent(agent.id) } label: {
+                        HStack(spacing: 10) {
+                            AgentAvatar(agent: agent, url: store.avatarURL(agent), size: 20)
+                            Text(agent.name).font(.system(size: 12, weight: .medium)).lineLimit(1).frame(width: 90, alignment: .leading)
+                            GeometryReader { proxy in
+                                Capsule().fill(Color(hex: agent.color, fallback: .accentColor).opacity(0.8))
+                                    .frame(width: max(4, proxy.size.width * CGFloat(agent.usage.week.total) / CGFloat(peak)), height: 5)
+                                    .frame(maxHeight: .infinity, alignment: .center)
+                            }
+                            .frame(height: 12)
+                            Text(Format.tokens(agent.usage.week.total)).font(.system(size: 12)).monospacedDigit().frame(width: 52, alignment: .trailing)
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    func heading(_ title: Text, trailing: String?) -> some View {
+        HStack {
+            title.font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            Spacer()
+            if let trailing { Text(trailing).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary).monospacedDigit() }
+        }
+        .padding(.horizontal, 2)
     }
 }
 

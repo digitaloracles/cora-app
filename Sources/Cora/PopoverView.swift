@@ -13,8 +13,8 @@ enum PopoverTab: String, CaseIterable, Identifiable {
     }
 }
 
-/// The menu bar popover: the space, then three tabs. Agents with what they do now; Tokens with the subscriptions
-/// (each one can be pinned to the menu bar) and each agent's usage; Threads with the latest reasoning of each thread.
+/// The menu bar popover: the space, then three tabs. Agents with what they do now; Tokens with one line per
+/// subscription (each one can be pinned to the menu bar) and each agent's tokens in the last 7 days; Threads with the latest reasoning of each thread.
 struct PopoverView: View {
     @ObservedObject var store: SpaceStore
     var openAgent: (String?) -> Void = { _ in }
@@ -58,41 +58,8 @@ struct PopoverView: View {
         }
     }
 
-    @ViewBuilder func tokens(_ snapshot: Snapshot) -> some View {
-        section("Subscriptions") {
-            if snapshot.accounts.isEmpty {
-                empty("No subscription is linked to your agents.")
-            } else {
-                Text("Pin the subscriptions you want to see in the menu bar.").font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
-            }
-            ForEach(snapshot.accounts) { account in
-                AccountCard(account: account, agents: snapshot.agents.filter { account.agentIds.contains($0.id) },
-                            pinned: store.isPinned(account), onPin: { store.togglePin(account) }, avatarURL: { store.avatarURL($0) })
-            }
-        }
-        section("Tokens by agent") {
-            HStack {
-                Spacer()
-                ForEach(["Today", "7 days", "30 days"], id: \.self) { Text(LocalizedStringKey($0)).frame(width: 58, alignment: .trailing) }
-            }
-            .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary).padding(.horizontal, 10)
-            ForEach(snapshot.agents.sorted { $0.usage.month.total > $1.usage.month.total }) { agent in
-                Button { openAgent(agent.id) } label: {
-                    HStack(spacing: 8) {
-                        AgentAvatar(agent: agent, url: store.avatarURL(agent), size: 20)
-                        Text(agent.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
-                        Spacer(minLength: 4)
-                        ForEach(Array([agent.usage.today, agent.usage.week, agent.usage.month].enumerated()), id: \.offset) { _, value in
-                            Text(Format.tokens(value.total)).font(.system(size: 12)).monospacedDigit().frame(width: 58, alignment: .trailing)
-                        }
-                    }
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.035)))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
+    func tokens(_ snapshot: Snapshot) -> some View {
+        TokensSummary(store: store, snapshot: snapshot, openAgent: { openAgent($0) })
     }
 
     @ViewBuilder func threads(_ snapshot: Snapshot) -> some View {
@@ -126,7 +93,7 @@ struct PopoverView: View {
             if store.snapshot != nil {
                 Circle().fill(store.streamOnline || isStaticPreview ? Color.green : Color.orange).frame(width: 6, height: 6)
                     .help(store.streamOnline ? String(localized: "Live") : String(localized: "Reconnecting to the live stream…"))
-                Button { openAgent(nil) } label: { Image(systemName: "macwindow") }.buttonStyle(.borderless).help(String(localized: "Open the live window"))
+                Button { openAgent(tab == .tokens ? LiveSelection.tokens : nil) } label: { Image(systemName: "macwindow") }.buttonStyle(.borderless).help(String(localized: "Open the live window"))
                 Button { Task { await store.refresh() } } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.borderless).help(String(localized: "Refresh"))
             }
             Menu {

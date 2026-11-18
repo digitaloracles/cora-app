@@ -148,6 +148,8 @@ import Testing
                             accounts: [Account(id: "x", provider: "claude", label: "Claude", email: "seb@usecora.space", usage: usage, agentIds: []),
                                        Account(id: "y", provider: "claude", label: "Claude", email: "radix@usecora.space", usage: usage, agentIds: [])], agents: [])
         #expect(same.pinned(["x", "y"]).map(\.title) == ["Claude · seb", "Claude · radix"], "a label that only repeats the provider gives way to the address")
+        #expect(snapshot.accounts.map { snapshot.title(of: $0) } == ["Claude · Max Seb", "Claude · team", "Codex"], "the Tokens list names each subscription on one line")
+        #expect(snapshot.pinned(["a"]).map(\.title) == ["Claude"], "the menu bar adds the label only when two pinned ones share a provider")
     }
 
     @Test func pinsPersistPerSpace() throws {

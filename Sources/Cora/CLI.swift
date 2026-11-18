@@ -139,6 +139,10 @@ enum CLI {
             }
             let window = LiveWindow(store: store, selection: selection)
             try snapshot(window, width: 1000, height: 700, appearance: appearance, to: folder.appendingPathComponent("window-\(name).png"))
+            let agent = selection.agentId
+            selection.agentId = LiveSelection.tokens
+            try snapshot(LiveWindow(store: store, selection: selection), width: 1000, height: 700, appearance: appearance, to: folder.appendingPathComponent("window-tokens-\(name).png"))
+            selection.agentId = agent
         }
         Swift.print("Rendered into \(folder.path)")
     }

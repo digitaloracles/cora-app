@@ -6,6 +6,9 @@ final class LiveSelection: ObservableObject {
     @Published var thread: ThreadInfo?
     @Published var threadDetail: ThreadDetail?
     @Published var loadingThread = false
+
+    /// The sidebar entry of the Tokens page, beside the agents' ids.
+    static let tokens = "#tokens"
 }
 
 /// The live window: agents on the left; on the right what the selected one is doing now, its threads and its usage.
@@ -16,6 +19,9 @@ struct LiveWindow: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selection.agentId) {
+                Label("Tokens", systemImage: "gauge.with.dots.needle.33percent").font(.system(size: 13, weight: .medium))
+                    .tag(LiveSelection.tokens)
+                Section("Agents") {
                 ForEach(store.snapshot?.agents ?? []) { agent in
                     HStack(spacing: 8) {
                         AgentAvatar(agent: agent, url: store.avatarURL(agent), size: 24)
@@ -26,10 +32,13 @@ struct LiveWindow: View {
                     }
                     .tag(agent.id)
                 }
+                }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 210)
         } detail: {
-            if let id = selection.agentId, let agent = store.snapshot?.agent(id) {
+            if selection.agentId == LiveSelection.tokens, let snapshot = store.snapshot {
+                TokensPage(store: store, selection: selection, snapshot: snapshot)
+            } else if let id = selection.agentId, let agent = store.snapshot?.agent(id) {
                 AgentDetail(store: store, selection: selection, agent: agent)
             } else {
                 Text("Choose an agent").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -37,6 +46,28 @@ struct LiveWindow: View {
         }
         .frame(minWidth: 820, minHeight: 560)
         .onChange(of: selection.agentId) { _, _ in selection.thread = nil; selection.threadDetail = nil }
+    }
+}
+
+/// The window's Tokens page: the same summary as the popover, with room to breathe.
+struct TokensPage: View {
+    @ObservedObject var store: SpaceStore
+    @ObservedObject var selection: LiveSelection
+    let snapshot: Snapshot
+    @Environment(\.isStaticPreview) private var isStaticPreview
+
+    var body: some View {
+        if isStaticPreview { content } else { ScrollView { content } }
+    }
+
+    var content: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Tokens").font(.system(size: 20, weight: .semibold))
+            TokensSummary(store: store, snapshot: snapshot, openAgent: { selection.agentId = $0 })
+        }
+        .frame(maxWidth: 560, alignment: .leading)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
