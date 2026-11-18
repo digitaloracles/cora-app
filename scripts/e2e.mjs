@@ -73,7 +73,7 @@ try {
   // 2b. A second space on the same Mac: both stay connected, each read with its own token, and one can leave alone.
   const other = await knowledgeWorld();
   try {
-    other.app.store.createAgent({ name: "Nova", brainOwnerId: other.alice.user.id, tools: false, enabled: true, model: "claude/claude-opus-5-5" });
+    other.app.store.createAgent({ name: "Nova", brainOwnerId: other.alice.user.id, tools: false, enabled: true });
     const second = await other.request(other.alice, "/api/app/pairings", { method: "POST", body: {} });
     assert.equal(second.status, 201);
     const otherServer = new URL(second.data.link).searchParams.get("server");
