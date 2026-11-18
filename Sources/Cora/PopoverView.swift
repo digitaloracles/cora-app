@@ -22,6 +22,7 @@ struct PopoverView: View {
     var openAgent: (String?) -> Void = { _ in }
     @State var tab: PopoverTab = .agents
     @State var threadQuery = ""
+    @State var agentQuery = ""
     @Environment(\.isStaticPreview) private var isStaticPreview
 
     var body: some View {
@@ -34,7 +35,8 @@ struct PopoverView: View {
                 }
                 .pickerStyle(.segmented).labelsHidden()
                 .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 2)
-                if tab == .threads { ThreadSearchField(query: $threadQuery).padding(.horizontal, 10).padding(.top, 8) }
+                if tab == .agents { SearchField(query: $agentQuery, prompt: String(localized: "Search agents")).padding(.horizontal, 10).padding(.top, 8) }
+                if tab == .threads { SearchField(query: $threadQuery, prompt: String(localized: "Search threads")).padding(.horizontal, 10).padding(.top, 8) }
                 scrolling {
                     VStack(alignment: .leading, spacing: 14) {
                         switch tab {
@@ -54,10 +56,13 @@ struct PopoverView: View {
     }
 
     @ViewBuilder func agents(_ snapshot: Snapshot) -> some View {
+        let list = Agent.matching(snapshot.agents, agentQuery)
         if snapshot.agents.isEmpty {
             empty("No agents in this space for your account.")
+        } else if list.isEmpty {
+            empty("No agent matches your search.")
         }
-        ForEach(snapshot.agents) { agent in
+        ForEach(list) { agent in
             Button { openAgent(agent.id) } label: { AgentRow(agent: agent, url: store.avatarURL(agent), live: liveLine(agent)) }
                 .buttonStyle(.plain)
         }
@@ -260,13 +265,14 @@ struct ThreadEntry: Identifiable {
     }
 }
 
-struct ThreadSearchField: View {
+struct SearchField: View {
     @Binding var query: String
+    var prompt: String
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(.secondary)
-            TextField(String(localized: "Search threads"), text: $query).textFieldStyle(.plain).font(.system(size: 12))
+            TextField(prompt, text: $query).textFieldStyle(.plain).font(.system(size: 12))
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
                     .buttonStyle(.plain).help(String(localized: "Clear"))

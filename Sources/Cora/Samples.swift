@@ -48,6 +48,8 @@ enum Samples {
             usage: QuotaUsage(windows: [QuotaWindow(id: "muse:weekly", kind: .weekly, usedPercent: 93, resetsAt: now.addingTimeInterval(4 * 86400 + 9 * 3600))]), agentIds: [])
         let ollama = Account(id: "sub_ollama", provider: "ollama", label: "Ollama Cloud", email: "seb@usecora.space",
             usage: QuotaUsage(windows: [QuotaWindow(id: "ollama:monthly", kind: .custom, usedPercent: 21, resetsAt: now.addingTimeInterval(25 * 86400), minutes: 43200)]), agentIds: [])
+        let deepseek = Account(id: "provider_deepseek", provider: "deepseek", label: "DeepSeek", server: true,
+            usage: QuotaUsage(windows: [], balances: [Balance(kind: "total", currency: "USD", amount: "14.90"), Balance(kind: "granted", currency: "USD", amount: "0.00"), Balance(kind: "topped-up", currency: "USD", amount: "14.90")]), agentIds: [])
         let live = LiveTrace(traceId: "tr_buzz", channelId: "1572562024360054865", threadName: "App macOS: quote e reasoning dal vivo", link: "https://discord.com/channels/1/2",
                              startedAt: now.addingTimeInterval(-195), model: "claude/claude-opus-5-5", goal: "The macOS app builds and reads agents, quotas and live reasoning from the chosen space.", tokensIn: 184_200, tokensOut: 12_900, stepCount: 42, lastStep: thinking)
         let threads = [
@@ -60,7 +62,7 @@ enum Samples {
             Agent(id: "ag_nico", name: "Nico", color: "#e05aa5", model: "codex/gpt-6", state: .idle, accountIds: ["sub_codex"], usage: usage(18_000)),
             Agent(id: "ag_radix", name: "Radix", color: "#3fbf8f", enabled: false, model: "hermes/kimi-k3", state: .off, accountIds: ["sub_kimi"], usage: usage(4_000)),
         ]
-        return Snapshot(space: .init(name: "notseb", origin: "https://notseb.usecora.space"), user: .init(id: "u_seb", name: "Sebastiano", email: "seb@usecora.space", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama], agents: agents)
+        return Snapshot(space: .init(name: "notseb", origin: "https://notseb.usecora.space"), user: .init(id: "u_seb", name: "Sebastiano", email: "seb@usecora.space", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama, deepseek], agents: agents)
     }()
 
     @MainActor static func selection() -> LiveSelection {

@@ -147,6 +147,14 @@ public struct Account: Decodable, Sendable, Identifiable, Hashable {
     public var tightestWindow: QuotaWindow? {
         (usage?.windows ?? []).filter { $0.group.isEmpty }.max { $0.usedPercent < $1.usedPercent }
     }
+
+    /// What is left on a pay-as-you-go account (DeepSeek): the total balance, or the first one the provider reports.
+    /// Nothing when the account must sign in again: the last balance would no longer be true.
+    public var balance: Balance? {
+        guard usage?.issue != "AUTH_REQUIRED" else { return nil }
+        let list = usage?.balances ?? []
+        return list.first { $0.kind == "total" } ?? list.first
+    }
 }
 
 public struct QuotaUsage: Decodable, Sendable, Hashable {
@@ -209,6 +217,13 @@ public struct Balance: Decodable, Sendable, Hashable {
     public var kind: String
     public var currency: String
     public var amount: String
+
+    public init(kind: String, currency: String, amount: String) { self.kind = kind; self.currency = currency; self.amount = amount }
+
+    public var value: Double { Double(amount) ?? 0 }
+    public var isEmpty: Bool { value <= 0 }
+    /// `$14.90`, or `14,90 USD` in Italian.
+    public var text: String { Format.money(amount, currency: currency) }
 }
 
 public struct Tokens: Decodable, Sendable, Hashable {
@@ -480,6 +495,18 @@ public enum Providers {
         case "ollama": return "Ollama Cloud"
         case "deepseek": return "DeepSeek"
         default: return provider.prefix(1).uppercased() + provider.dropFirst()
+        }
+    }
+}
+
+extension Agent {
+    /// Every word of the query must appear in the agent's name, its model, what it is working on or its threads.
+    public static func matching(_ list: [Agent], _ query: String) -> [Agent] {
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !words.isEmpty else { return list }
+        return list.filter { agent in
+            let text = ([agent.name, agent.model] + agent.live.flatMap { [$0.threadName, $0.goal] } + agent.threads.map(\.name)).joined(separator: " ")
+            return words.allSatisfy { text.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
         }
     }
 }

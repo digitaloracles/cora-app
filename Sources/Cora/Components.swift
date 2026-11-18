@@ -120,7 +120,8 @@ extension QuotaWindow {
     }
 }
 
-/// One subscription on one line: provider mark and name, when its tightest window resets, what is left, the pin.
+/// One subscription on one line: provider mark and name, when its tightest window resets, what is left (or the balance
+/// of a pay-as-you-go account), the pin.
 struct SubscriptionRow: View {
     let account: Account
     let title: String
@@ -141,6 +142,11 @@ struct SubscriptionRow: View {
                 Text(Format.percent(window.remainingPercent)).font(.system(size: 12, weight: .semibold)).monospacedDigit()
                     .foregroundStyle(window.level == .normal ? Color.primary : window.level.color)
                     .frame(width: 36, alignment: .trailing)
+            } else if let balance = account.balance {
+                Text("Balance").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                Text(balance.text).font(.system(size: 12, weight: .semibold)).monospacedDigit().lineLimit(1)
+                    .foregroundStyle(balance.isEmpty ? QuotaWindow.Level.critical.color : Color.primary)
+                    .help(String(localized: "Pay-as-you-go: what is left on the account"))
             } else {
                 Text(issue).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 Text("–").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary).frame(width: 36, alignment: .trailing)
@@ -368,7 +374,7 @@ enum MenuBarTitle {
     @MainActor static func parts(_ store: SpaceStore) -> [Part] {
         guard let snapshot = store.snapshot else { return [] }
         var parts: [Part] = []
-        parts += snapshot.pinned(store.pins).map { Part(text: $0.value, level: $0.window?.level, provider: $0.provider, title: $0.title) }
+        parts += snapshot.pinned(store.pins).map { Part(text: $0.value, level: $0.level, provider: $0.provider, title: $0.title) }
         return parts
     }
 

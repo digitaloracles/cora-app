@@ -116,7 +116,8 @@ enum CLI {
             for window in account.usage?.windows ?? [] {
                 out += "    \(window.kind.rawValue)\(window.group.isEmpty ? "" : " " + window.group): \(Format.percent(window.remainingPercent)) left\(window.resetsAt.map { ", resets in " + Format.countdown(to: $0, italian: false) } ?? "")\n"
             }
-            if (account.usage?.windows ?? []).isEmpty { out += "    no reading (\(account.usage?.issue ?? account.usage?.state ?? "none"))\n" }
+            for balance in account.usage?.balances ?? [] { out += "    balance \(balance.kind): \(balance.amount) \(balance.currency)\n" }
+            if (account.usage?.windows ?? []).isEmpty && (account.usage?.balances ?? []).isEmpty { out += "    no reading (\(account.usage?.issue ?? account.usage?.state ?? "none"))\n" }
         }
         return out
     }

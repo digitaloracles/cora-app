@@ -136,6 +136,36 @@ import Testing
         if snapshot.accounts[1].tightestWindow == nil { #expect(unread.text.hasSuffix("–")) }
     }
 
+    @Test func payAsYouGoAccountsShowTheirBalance() throws {
+        // The shape notseb sends for DeepSeek: a valid reading with no percentage window, only balances.
+        let json = #"{"id":"provider_deepseek","provider":"deepseek","label":"DeepSeek","status":"ready","server":true,"usage":{"windows":[],"balances":[{"kind":"total","currency":"USD","amount":"14.90"},{"kind":"granted","currency":"USD","amount":"0.00"},{"kind":"topped-up","currency":"USD","amount":"14.90"}],"fetchedAt":"2026-11-18T14:44:38.101Z","state":"ready","issue":null},"agentIds":[]}"#
+        let deepseek = try JSONDecoder().decode(Account.self, from: Data(json.utf8))
+        #expect(deepseek.tightestWindow == nil)
+        #expect(deepseek.balance?.kind == "total" && deepseek.balance?.amount == "14.90", "the total, not the bonus or the top-ups")
+        let snapshot = Snapshot(space: .init(name: "s", origin: "https://s.usecora.space"), user: .init(id: "u", name: "U", email: "u@x", role: "owner"),
+                                accounts: [deepseek, Account(id: "e", provider: "deepseek", label: "Empty", usage: QuotaUsage(windows: [], balances: [Balance(kind: "total", currency: "USD", amount: "0.00")]), agentIds: [])], agents: [])
+        let pin = try #require(snapshot.pinned([deepseek.id]).first)
+        #expect(pin.value != "–" && pin.value.contains("14"), "the menu bar shows the balance instead of no reading")
+        #expect(pin.level == nil)
+        #expect(snapshot.pinned(["e"]).first?.level == .critical, "an empty balance is red")
+        #expect(Format.money("14.90", currency: "USD", locale: Locale(identifier: "en_US")) == "$14.90")
+        #expect(Format.money("14.90", currency: "USD", locale: Locale(identifier: "it_IT")).hasPrefix("14,90"))
+        #expect(Format.money("0.5", currency: "CNY", locale: Locale(identifier: "en_US")).contains("0.50"))
+        let signedOut = Account(id: "k", provider: "deepseek", label: "", usage: QuotaUsage(state: "unavailable", windows: [], balances: [Balance(kind: "total", currency: "USD", amount: "3.20")], issue: "AUTH_REQUIRED"), agentIds: [])
+        #expect(signedOut.balance == nil, "an account that must sign in again does not show its last balance")
+    }
+
+    @Test func searchFindsAgentsByNameModelAndWork() {
+        let agents = [Agent(id: "a", name: "Primo", color: "#000", model: "grok/grok-4.7", state: .idle, accountIds: [], usage: .init(today: .zero, week: .zero, month: .zero, days: [])),
+                      Agent(id: "b", name: "Véra", color: "#000", model: "claude/claude-opus-5-5", state: .idle, accountIds: [], usage: .init(today: .zero, week: .zero, month: .zero, days: []),
+                            threads: [ThreadInfo(id: "t", name: "Ragusa Buzz social", status: "active", lastAt: nil, reasoning: "", tokensIn: 0, tokensOut: 0)])]
+        #expect(Agent.matching(agents, "").map(\.id) == ["a", "b"])
+        #expect(Agent.matching(agents, "prim").map(\.id) == ["a"])
+        #expect(Agent.matching(agents, "vera").map(\.id) == ["b"], "accents do not matter")
+        #expect(Agent.matching(agents, "opus ragusa").map(\.id) == ["b"], "every word, from the model and the threads")
+        #expect(Agent.matching(agents, "nobody").isEmpty)
+    }
+
     @Test func twoSubscriptionsOfOneProviderKeepTheirLabels() {
         let usage = QuotaUsage(windows: [QuotaWindow(id: "w", kind: .weekly, usedPercent: 40, resetsAt: nil)])
         let snapshot = Snapshot(space: .init(name: "s", origin: "https://s.usecora.space"), user: .init(id: "u", name: "U", email: "u@x", role: "owner"),

@@ -45,6 +45,18 @@ public enum Format {
 
     public static func percent(_ value: Double) -> String { "\(Int(value.rounded()))%" }
 
+    /// An amount the provider sends as a decimal string, with its currency: `$14.90`, `14,90 USD`.
+    public static func money(_ amount: String, currency: String, locale: Locale = .current) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currency
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        guard let number = Decimal(string: amount, locale: Locale(identifier: "en_US_POSIX")) else { return "\(amount) \(currency)" }
+        return formatter.string(from: number as NSDecimalNumber) ?? "\(amount) \(currency)"
+    }
+
     /// The model id without its harness: `claude/claude-opus-5-5` → `claude-opus-5-5`.
     public static func model(_ id: String) -> String { id.split(separator: "/").last.map(String.init) ?? id }
 }

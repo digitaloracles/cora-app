@@ -125,6 +125,11 @@ struct UsageStrip: View {
                                 UsageBar(usedPercent: window.usedPercent, color: window.level.color).frame(width: 70)
                                 Text("\(Format.percent(window.remainingPercent)) left").font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
                             }
+                        } else if let balance = account.balance {
+                            HStack(spacing: 6) {
+                                Text(Providers.name(account.provider)).font(.system(size: 11, weight: .medium))
+                                Text(balance.text).font(.system(size: 11)).foregroundStyle(balance.isEmpty ? QuotaWindow.Level.critical.color : .secondary).monospacedDigit()
+                            }
                         } else {
                             Text(Providers.name(account.provider)).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                         }
