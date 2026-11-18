@@ -67,7 +67,7 @@ struct PopoverView: View {
             }
             ForEach(snapshot.accounts) { account in
                 AccountCard(account: account, agents: snapshot.agents.filter { account.agentIds.contains($0.id) },
-                            pinned: store.isPinned(account), onPin: { store.togglePin(account) })
+                            pinned: store.isPinned(account), onPin: { store.togglePin(account) }, avatarURL: { store.avatarURL($0) })
             }
         }
         section("Tokens by agent") {

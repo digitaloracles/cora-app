@@ -70,3 +70,4 @@
 "Tokens by agent" = "Token per agente";
 "No threads yet." = "Ancora nessun thread.";
 "%@: %lld working" = "%1$@: %2$lld al lavoro";
+"No agent uses it" = "Nessun agente la usa";

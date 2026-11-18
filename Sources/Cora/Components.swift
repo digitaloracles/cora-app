@@ -143,6 +143,7 @@ struct AccountCard: View {
     let agents: [Agent]
     var pinned = false
     var onPin: (() -> Void)?
+    var avatarURL: (Agent) -> URL? = { _ in nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -177,9 +178,18 @@ struct AccountCard: View {
                 ForEach(windows) { WindowRow(window: $0) }
                     .opacity(account.usage?.stale == true ? 0.55 : 1)
             }
-            if !agents.isEmpty {
-                Text("Used by \(agents.map(\.name).joined(separator: ", "))")
-                    .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
+            if agents.isEmpty {
+                Text("No agent uses it").font(.system(size: 11)).foregroundStyle(.tertiary)
+            } else {
+                HStack(spacing: 5) {
+                    ForEach(agents) { agent in
+                        AgentAvatar(agent: agent, url: avatarURL(agent), size: 20)
+                            .contentShape(Circle())
+                            .help(agent.name)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("Used by \(agents.map(\.name).joined(separator: ", "))"))
             }
         }
         .padding(12)

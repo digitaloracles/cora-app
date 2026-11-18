@@ -67,7 +67,7 @@ enum CLI {
                     Swift.print("Disconnected from \(connection.host)")
                 } else { Swift.print("Not connected") }
             case .renderPreview(let directory):
-                try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_claude", "sub_codex"]), selection: Samples.selection(), directory: directory, steps: Samples.steps)
+                try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_claude", "sub_codex", "sub_gemini"]), selection: Samples.selection(), directory: directory, steps: Samples.steps)
             case .renderLive(let directory):
                 let store = SpaceStore()
                 store.start()

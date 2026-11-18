@@ -144,6 +144,10 @@ import Testing
                                            Account(id: "c", provider: "codex", label: "ChatGPT Pro", usage: nil, agentIds: [])], agents: [])
         #expect(snapshot.pinned(["a", "b", "c"]).map(\.text) == ["Claude · Max Seb 60%", "Claude · team 60%", "Codex –"])
         #expect(snapshot.pinned(["c"]).map(\.value) == ["–"], "no reading yet")
+        let same = Snapshot(space: snapshot.space, user: snapshot.user,
+                            accounts: [Account(id: "x", provider: "claude", label: "Claude", email: "seb@usecora.space", usage: usage, agentIds: []),
+                                       Account(id: "y", provider: "claude", label: "Claude", email: "radix@usecora.space", usage: usage, agentIds: [])], agents: [])
+        #expect(same.pinned(["x", "y"]).map(\.title) == ["Claude · seb", "Claude · radix"], "a label that only repeats the provider gives way to the address")
     }
 
     @Test func pinsPersistPerSpace() throws {

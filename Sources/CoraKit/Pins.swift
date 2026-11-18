@@ -39,7 +39,8 @@ extension Snapshot {
         let providers = Dictionary(grouping: chosen, by: \.provider)
         return chosen.map { account in
             let shared = (providers[account.provider]?.count ?? 0) > 1
-            let detail = account.label.isEmpty ? account.email.split(separator: "@").first.map(String.init) ?? account.id : account.label
+            let named = !account.label.isEmpty && account.label != Providers.name(account.provider)
+            let detail = named ? account.label : account.email.split(separator: "@").first.map(String.init) ?? account.id
             let title = shared && detail != Providers.name(account.provider) ? "\(Providers.name(account.provider)) · \(detail)" : Providers.name(account.provider)
             return PinnedQuota(accountId: account.id, provider: account.provider, title: title, window: account.tightestWindow)
         }

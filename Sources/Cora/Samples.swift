@@ -37,6 +37,8 @@ enum Samples {
                                         QuotaWindow(id: "weekly:fable", kind: .weekly, group: "Fable", usedPercent: 22, resetsAt: resetWeek)]), agentIds: ["ag_buzz", "ag_ada"])
         let codex = Account(id: "sub_codex", provider: "codex", label: "ChatGPT Pro", email: "seb@usecora.space", plan: "pro",
             usage: QuotaUsage(windows: [QuotaWindow(id: "codex:primary", kind: .session, usedPercent: 84, resetsAt: now.addingTimeInterval(41 * 60)), QuotaWindow(id: "codex:secondary", kind: .weekly, usedPercent: 46, resetsAt: resetWeek)]), agentIds: ["ag_nico"])
+        let gemini = Account(id: "sub_gemini", provider: "gemini", label: "Gemini", email: "seb@usecora.space", plan: "pro",
+            usage: QuotaUsage(windows: [QuotaWindow(id: "gemini:daily", kind: .custom, usedPercent: 12, resetsAt: now.addingTimeInterval(9 * 3600), minutes: 1440)]), agentIds: [])
         let kimi = Account(id: "sub_kimi", provider: "kimi", label: "Kimi", email: "agents@usecora.space", usage: QuotaUsage(state: "unavailable", windows: [], issue: "AUTH_REQUIRED"), agentIds: ["ag_radix"])
         let live = LiveTrace(traceId: "tr_buzz", channelId: "1572562024360054865", threadName: "App macOS: quote e reasoning dal vivo", link: "https://discord.com/channels/1/2",
                              startedAt: now.addingTimeInterval(-195), model: "claude/claude-opus-5-5", goal: "The macOS app builds and reads agents, quotas and live reasoning from the chosen space.", tokensIn: 184_200, tokensOut: 12_900, stepCount: 42, lastStep: thinking)
@@ -50,7 +52,7 @@ enum Samples {
             Agent(id: "ag_nico", name: "Nico", color: "#e05aa5", model: "codex/gpt-6", state: .idle, accountIds: ["sub_codex"], usage: usage(18_000)),
             Agent(id: "ag_radix", name: "Radix", color: "#3fbf8f", enabled: false, model: "hermes/kimi-k3", state: .off, accountIds: ["sub_kimi"], usage: usage(4_000)),
         ]
-        return Snapshot(space: .init(name: "notseb", origin: "https://notseb.usecora.space"), user: .init(id: "u_seb", name: "Sebastiano", email: "seb@usecora.space", role: "owner"), accounts: [claude, codex, kimi], agents: agents)
+        return Snapshot(space: .init(name: "notseb", origin: "https://notseb.usecora.space"), user: .init(id: "u_seb", name: "Sebastiano", email: "seb@usecora.space", role: "owner"), accounts: [claude, codex, gemini, kimi], agents: agents)
     }()
 
     @MainActor static func selection() -> LiveSelection {
