@@ -1,0 +1,222 @@
+import AppKit
+import CoraKit
+import Foundation
+
+/// The connected space as the app shows it: the last snapshot, the live steps from the event stream, the connection state.
+@MainActor
+final class SpaceStore: ObservableObject {
+    enum Phase: Equatable { case disconnected, waitingForPanel(String), connecting, ready, failed(String) }
+
+    @Published private(set) var connection: Connection?
+    @Published private(set) var snapshot: Snapshot?
+    @Published private(set) var phase: Phase = .disconnected
+    @Published private(set) var streamOnline = false
+    @Published private(set) var refreshedAt: Date?
+    @Published private(set) var steps: [String: [Step]] = [:]
+    @Published private(set) var traces: [String: TraceDetail] = [:]
+    @Published var spaceInput = "notseb.usecora.space"
+
+    private(set) var client: CoraClient?
+    private var streamTask: Task<Void, Never>?
+    private var pollTask: Task<Void, Never>?
+    private var pendingRefresh: Task<Void, Never>?
+    private let maxSteps = 300
+
+    init(preview: Snapshot? = nil) {
+        if let preview {
+            snapshot = preview
+            phase = .ready
+            connection = Connection(server: URL(string: preview.space.origin) ?? URL(string: "https://example.usecora.space")!, spaceName: preview.space.name, userName: preview.user.name, email: preview.user.email, deviceId: "preview")
+        }
+    }
+
+    func start() {
+        guard let connection = Storage.loadConnection() else { phase = .disconnected; return }
+        guard let token = Storage.token(for: connection) else {
+            // A Keychain that is not readable yet (wake, first unlock) keeps the pairing and tries again later.
+            self.connection = connection
+            phase = .failed(String(localized: "The Keychain is locked: unlock your Mac to read this space."))
+            Task { try? await Task.sleep(nanoseconds: 30_000_000_000); if self.client == nil { self.start() } }
+            return
+        }
+        attach(connection, token: token)
+    }
+
+    private func attach(_ connection: Connection, token: String) {
+        self.connection = connection
+        client = CoraClient(server: connection.server, token: token)
+        spaceInput = connection.host
+        phase = snapshot == nil ? .connecting : .ready
+        Task { await refresh() }
+        runStream()
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                await self?.refresh()
+            }
+        }
+    }
+
+    /// Sends the person to the panel of the space, signed in there, to authorize this Mac.
+    func authorize() {
+        guard let origin = Space.origin(spaceInput) else {
+            phase = .failed(String(localized: "Write the address of your space, for example notseb.usecora.space."))
+            return
+        }
+        let state = Space.newState()
+        Storage.rememberPendingState(state)
+        phase = .waitingForPanel(origin.host ?? origin.absoluteString)
+        NSWorkspace.shared.open(Space.authorizeURL(origin: origin, state: state))
+    }
+
+    /// A `cora://connect` link from the panel. One this Mac did not ask for is confirmed first.
+    func handle(_ url: URL) {
+        let link: ConnectLink
+        do { link = try ConnectLink.parse(url) } catch {
+            phase = .failed(String(localized: "This link does not come from a Cora panel."))
+            return
+        }
+        let expected = Storage.takePendingState()
+        if link.state == nil || link.state != expected {
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.messageText = String(localized: "Connect this Mac to \(link.server.host ?? "")?")
+            alert.informativeText = String(localized: "The app will read the agents, quotas and live work you see in that space. It cannot change anything.")
+            alert.addButton(withTitle: String(localized: "Connect"))
+            alert.addButton(withTitle: String(localized: "Cancel"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+        Task { await connect(link) }
+    }
+
+    func connect(_ link: ConnectLink) async {
+        phase = .connecting
+        do {
+            let paired = try await CoraClient.exchange(link, deviceName: Host.current().localizedName ?? "Mac", platform: "macOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion)")
+            let connection = Connection(server: link.server, spaceName: link.server.host ?? "", userName: paired.user.name, email: paired.user.email, deviceId: paired.device.id)
+            if let previous = self.connection, previous.server != connection.server { Storage.forget(previous) }
+            try Storage.save(connection, token: paired.token)
+            snapshot = nil
+            steps = [:]; traces = [:]
+            attach(connection, token: paired.token)
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    func disconnect() async {
+        streamTask?.cancel(); pollTask?.cancel()
+        if let client { try? await client.signOut() }
+        if let connection { Storage.forget(connection) }
+        client = nil; connection = nil; snapshot = nil; steps = [:]; traces = [:]; streamOnline = false
+        phase = .disconnected
+    }
+
+    func refresh() async {
+        guard let client else { return }
+        do {
+            let fresh = try await client.snapshot()
+            snapshot = fresh
+            refreshedAt = Date()
+            phase = .ready
+            if var connection, connection.spaceName != fresh.space.name || connection.userName != fresh.user.name {
+                connection.spaceName = fresh.space.name; connection.userName = fresh.user.name
+                self.connection = connection
+            }
+        } catch ClientError.unauthorized(let message) {
+            revoked(message)
+        } catch {
+            phase = snapshot == nil ? .failed(error.localizedDescription) : .ready
+        }
+    }
+
+    private func revoked(_ message: String) {
+        streamTask?.cancel(); pollTask?.cancel()
+        if let connection { Storage.forget(connection) }
+        client = nil; streamOnline = false
+        phase = .failed(message.isEmpty ? String(localized: "This Mac was disconnected from the space. Connect it again from the panel.") : message)
+    }
+
+    private func scheduleRefresh() {
+        pendingRefresh?.cancel()
+        pendingRefresh = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
+    }
+
+    private func runStream() {
+        streamTask?.cancel()
+        guard let client else { return }
+        streamTask = Task { [weak self] in
+            var delay: UInt64 = 2
+            while !Task.isCancelled {
+                do {
+                    for try await event in client.events() {
+                        delay = 2
+                        self?.receive(event)
+                    }
+                } catch ClientError.unauthorized(let message) {
+                    self?.revoked(message); return
+                } catch {}
+                self?.streamOnline = false
+                try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
+                delay = min(delay * 2, 60)
+            }
+        }
+    }
+
+    func receive(_ event: ServerEvent) {
+        switch event.type {
+        case "hello": streamOnline = true
+        case "access-revoked": revoked("")
+        case "trace":
+            if event.event == "step", let step = event.step, !event.traceId.isEmpty {
+                var list = steps[event.traceId] ?? traces[event.traceId]?.steps ?? []
+                list.append(step)
+                if list.count > maxSteps { list.removeFirst(list.count - maxSteps) }
+                steps[event.traceId] = list
+                updateLastStep(traceId: event.traceId, agentId: event.agentId, step: step)
+            } else {
+                if event.event == "end", let id = event.trace?.id { traces[id] = nil }
+                scheduleRefresh()
+            }
+        case "subscription-usage", "agents", "agent-owners": scheduleRefresh()
+        default: break
+        }
+    }
+
+    private func updateLastStep(traceId: String, agentId: String, step: Step) {
+        guard var snapshot, let index = snapshot.agents.firstIndex(where: { $0.id == agentId }) else { return }
+        if let live = snapshot.agents[index].live.firstIndex(where: { $0.traceId == traceId }) {
+            snapshot.agents[index].live[live].lastStep = step
+            snapshot.agents[index].live[live].stepCount += 1
+        } else {
+            scheduleRefresh()
+        }
+        if step.kind != .note { snapshot.agents[index].state = .working }
+        self.snapshot = snapshot
+    }
+
+    /// The whole turn, then its new steps from the stream.
+    func loadTrace(_ id: String) async {
+        guard let client else { return }
+        if let detail = try? await client.trace(id) {
+            traces[id] = detail
+            let streamed = steps[id] ?? []
+            let known = Set(detail.steps.map(\.id))
+            steps[id] = detail.steps + streamed.filter { !known.contains($0.id) }
+        }
+    }
+
+    func loadThread(_ id: String) async -> ThreadDetail? {
+        guard let client else { return nil }
+        return try? await client.thread(id)
+    }
+
+    func stepsFor(_ traceId: String) -> [Step] { steps[traceId] ?? traces[traceId]?.steps ?? [] }
+
+    func avatarURL(_ agent: Agent) -> URL? { client?.avatarURL(agent.avatar) }
+}

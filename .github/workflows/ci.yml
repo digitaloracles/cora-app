@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "buzz/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      cora_ref:
+        description: digitaloracles/cora ref for the end-to-end check
+        default: main
+
+jobs:
+  build:
+    runs-on: macos-15
+    env:
+      CORA_REF: ${{ github.event.inputs.cora_ref || vars.CORA_REF || 'buzz/macos-app' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version && sw_vers
+      - name: Test
+        run: swift test
+      - name: Build app
+        run: scripts/build-app.sh
+      - name: Render previews
+        run: build/Cora.app/Contents/MacOS/Cora --render-preview "$RUNNER_TEMP/previews"
+      - uses: actions/checkout@v4
+        with:
+          repository: digitaloracles/cora
+          ref: ${{ env.CORA_REF }}
+          path: cora
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cora server dependencies
+        run: npm ci --prefix cora --no-audit --no-fund
+      - name: End-to-end against a real Cora server
+        run: node scripts/e2e.mjs build/Cora.app cora "$RUNNER_TEMP/e2e"
+      - name: Package
+        run: ditto -c -k --keepParent build/Cora.app "$RUNNER_TEMP/Cora.zip"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidence
+          path: |
+            ${{ runner.temp }}/previews
+            ${{ runner.temp }}/e2e
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cora.app
+          path: ${{ runner.temp }}/Cora.zip
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/Cora.zip" --title "Cora $GITHUB_REF_NAME" --notes "macOS 14 or later. Ad-hoc signed: on first launch right-click Cora.app and choose Open."

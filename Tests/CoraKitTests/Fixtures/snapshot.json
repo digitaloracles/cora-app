@@ -1,0 +1,16 @@
+{"version":1,"generatedAt":"2026-11-18T10:58:01.120Z","timezone":"Europe/Rome","space":{"name":"notseb","origin":"https://notseb.usecora.space"},
+"user":{"id":"u1","name":"Seb","email":"seb@example.com","role":"owner"},
+"accounts":[
+ {"id":"sb_1","provider":"claude","label":"Claude","email":"seb@example.com","plan":"max","status":"ready","server":false,"resident":false,
+  "usage":{"subscriptionId":"sb_1","state":"ready","windows":[{"id":"five_hour","kind":"session","group":"","usedPercent":42,"resetsAt":"2026-11-18T12:00:00.000Z","minutes":null},{"id":"seven_day","kind":"weekly","group":"","usedPercent":81.5,"resetsAt":"2026-11-20T08:00:00Z","minutes":null},{"id":"weekly:fable","kind":"weekly","group":"Fable","usedPercent":97,"resetsAt":null,"minutes":null},{"id":"x","kind":"hourly-new","group":"","usedPercent":10}],"balances":[],"fetchedAt":"2026-11-18T10:57:00.000Z","checkedAt":null,"nextCheckAt":null,"issue":null,"stale":false},
+  "agentIds":["ag_a"]},
+ {"id":"sb_2","provider":"brand-new","label":"","email":"","plan":"","status":"ready","server":true,"usage":{"state":"unavailable","windows":[],"balances":[{"kind":"total","currency":"USD","amount":"3.20"}],"issue":"AUTH_REQUIRED","stale":false},"agentIds":[]},
+ {"broken":true}
+],
+"agents":[
+ {"id":"ag_a","name":"Buzz","color":"#f2a93b","enabled":true,"sealed":false,"model":"claude/claude-opus-5-5","avatar":"/avatars/ag_a.png?v=3","state":"working","accountIds":["sb_1"],
+  "usage":{"today":{"tokensIn":1200,"tokensOut":300,"turns":1},"week":{"tokensIn":5000,"tokensOut":900,"turns":4},"month":{"tokensIn":9000,"tokensOut":1000,"turns":9},"days":[{"day":"2026-11-18","tokensIn":1200,"tokensOut":300,"turns":1}]},
+  "live":[{"traceId":"tr_1","kind":"chat","channelId":"157","threadName":"App macOS","link":"https://discord.com/channels/1/157","startedAt":"2026-11-18T10:55:00.000Z","model":"claude/claude-opus-5-5","goal":"","tokensIn":100,"tokensOut":20,"stepCount":3,"lastStep":{"type":"thinking","at":"2026-11-18T10:57:59.000Z","name":"","text":"Checking the quotas"}}],
+  "threads":[{"id":"157","name":"App macOS","kind":"discord","link":"","open":true,"listening":true,"status":"active","lastAt":"2026-11-18T10:57:59.000Z","traceId":"tr_1","reasoning":"Checking the quotas","tokensIn":100,"tokensOut":20}]},
+ {"id":"ag_b","name":"Ada","color":"","enabled":false,"model":"","avatar":"","state":"sleeping","accountIds":[],"usage":{},"live":[],"threads":[]}
+]}
