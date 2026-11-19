@@ -71,11 +71,11 @@ enum Samples {
         return PlanBoard(open: [buzz, ada], history: history, next: "older")
     }()
 
-    /// The reasoning linked to the charts step of Buzz's plan, opened in the plan screenshot.
+    /// The reasoning linked to the summary step of Buzz's plan, opened in the plan screenshot.
     static let planReasoning: [String: [Step]] = ["plan_buzz/item_3": [
-        Step(kind: .thinking, at: now.addingTimeInterval(-300), text: "The figures match the invoices: the charts can go by region, one page each."),
-        Step(kind: .tool, at: now.addingTimeInterval(-200), name: "shell", args: "{command: \"python3 charts.py --by region\"}", result: "charts/north.png\ncharts/centre.png\ncharts/south.png"),
-        Step(kind: .text, at: now.addingTimeInterval(-120), text: "Charts ready, one page per region."),
+        Step(kind: .thinking, at: now.addingTimeInterval(-300), text: "Revenue is up in two regions out of three: the summary opens with that and leaves the details to the charts."),
+        Step(kind: .tool, at: now.addingTimeInterval(-200), name: "shell", args: "{command: \"python3 summary.py --quarter Q3\"}", result: "summary.md: 310 words\nfigures checked: 42 of 42"),
+        Step(kind: .text, at: now.addingTimeInterval(-120), text: "Summary drafted. Next: share the report with the team."),
     ]]
 
     static let snapshot: Snapshot = {
