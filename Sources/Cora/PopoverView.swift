@@ -215,7 +215,7 @@ struct ConnectPanel: View {
             Text(cancel == nil ? LocalizedStringKey("Connect your space") : LocalizedStringKey("Add another space")).font(.system(size: 13, weight: .semibold))
             Text("The panel opens in your browser. Sign in there and authorize this Mac: Cora comes back here on its own.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            TextField(String(localized: "Space address"), text: $store.spaceInput)
+            TextField(String(localized: "Space address"), text: $store.spaceInput, prompt: Text(verbatim: "yourspace.usecora.space"))
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { store.authorize() }
             HStack {

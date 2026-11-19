@@ -11,7 +11,7 @@ final class Spaces: NSObject, ObservableObject, ASWebAuthenticationPresentationC
     @Published private(set) var stores: [SpaceStore] = []
     @Published var selected: URL?
     @Published var pairing: Pairing = .idle
-    @Published var address = "notseb.usecora.space"
+    @Published var address = ""
     /// A link the app did not ask for, waiting for the person to confirm it.
     @Published var unrequested: ConnectLink?
     private var session: ASWebAuthenticationSession?
@@ -37,7 +37,7 @@ final class Spaces: NSObject, ObservableObject, ASWebAuthenticationPresentationC
     /// Opens the panel of the space, signed in there, to authorize this iPhone; the panel answers with a cora:// link.
     func authorize() {
         guard let origin = Space.origin(address) else {
-            pairing = .failed(String(localized: "Write the address of your space, for example notseb.usecora.space."))
+            pairing = .failed(String(localized: "Write the address of your space, for example yourspace.usecora.space."))
             return
         }
         let state = Space.newState()

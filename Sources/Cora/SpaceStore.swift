@@ -14,7 +14,7 @@ final class SpaceStore: ObservableObject {
     @Published private(set) var refreshedAt: Date?
     @Published private(set) var steps: [String: [Step]] = [:]
     @Published private(set) var traces: [String: TraceDetail] = [:]
-    @Published var spaceInput = "notseb.usecora.space"
+    @Published var spaceInput = ""
     /// The subscriptions shown in the menu bar, chosen in the popover and kept on this Mac per space.
     @Published private(set) var pins: [String] = []
     /// The subscriptions opened to show every limit; the popover remembers them while the app runs.
@@ -107,7 +107,7 @@ final class SpaceStore: ObservableObject {
     /// Sends the person to the panel of the space, signed in there, to authorize this Mac.
     func authorize() {
         guard let origin = Space.origin(spaceInput) else {
-            phase = .failed(String(localized: "Write the address of your space, for example notseb.usecora.space."))
+            phase = .failed(String(localized: "Write the address of your space, for example yourspace.usecora.space."))
             return
         }
         let state = Space.newState()

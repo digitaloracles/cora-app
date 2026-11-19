@@ -68,7 +68,7 @@ struct ConnectView: View {
                 .padding(.vertical, 6)
             }
             Section("Space address") {
-                TextField("notseb.usecora.space", text: $spaces.address)
+                TextField(String(localized: "Space address"), text: $spaces.address, prompt: Text(verbatim: "yourspace.usecora.space"))
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                     .submitLabel(.go).onSubmit { spaces.authorize() }
             }
