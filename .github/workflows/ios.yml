@@ -5,6 +5,12 @@ on:
     branches: [main, "buzz/**"]
     paths: ["ios/**", "Sources/CoraKit/**", "Package.swift", ".github/workflows/ios.yml"]
   workflow_dispatch:
+    inputs:
+      language:
+        description: Language of the simulator screenshots
+        type: choice
+        options: [it, en]
+        default: it
 
 jobs:
   simulator:
@@ -26,6 +32,8 @@ jobs:
           xcodebuild build -project ios/CoraiOS.xcodeproj -scheme Cora -configuration Debug \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build/sim CODE_SIGNING_ALLOWED=NO 2>&1 | tail -40
       - name: Screenshots with sample data
+        env:
+          SHOT_LANGUAGE: ${{ inputs.language || 'it' }}
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c '
           import json, re, sys
@@ -41,7 +49,7 @@ jobs:
           shot() {
             name=$1; shift
             xcrun simctl terminate "$DEVICE" space.usecora.ios 2>/dev/null || true
-            env SIMCTL_CHILD_CORA_DEMO=1 "$@" xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "(it)" -AppleLocale it_IT
+            env SIMCTL_CHILD_CORA_DEMO=1 "$@" xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "($SHOT_LANGUAGE)" -AppleLocale "${SHOT_LANGUAGE}_$([ "$SHOT_LANGUAGE" = en ] && echo US || echo IT)"
             sleep 6
             xcrun simctl io "$DEVICE" screenshot "build/screenshots/$name.png"
           }
@@ -53,7 +61,7 @@ jobs:
           shot 6-plans SIMCTL_CHILD_CORA_DEMO_TAB=plans
           shot 7-plan SIMCTL_CHILD_CORA_DEMO_TAB=plans SIMCTL_CHILD_CORA_DEMO_PLAN=plan_buzz SIMCTL_CHILD_CORA_DEMO_PLAN_ITEM=plan_buzz/item_3
           xcrun simctl terminate "$DEVICE" space.usecora.ios 2>/dev/null || true
-          xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "(it)" -AppleLocale it_IT
+          xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "($SHOT_LANGUAGE)" -AppleLocale "${SHOT_LANGUAGE}_$([ "$SHOT_LANGUAGE" = en ] && echo US || echo IT)"
           sleep 6
           xcrun simctl io "$DEVICE" screenshot build/screenshots/0-connect.png
           ls -la build/screenshots
@@ -65,6 +73,7 @@ jobs:
           if-no-files-found: warn
 
   device:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.language != 'en' }}
     runs-on: macos-15
     timeout-minutes: 45
     env:
