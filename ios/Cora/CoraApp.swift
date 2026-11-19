@@ -21,11 +21,11 @@ struct CoraApp: App {
     }
 }
 
-enum Tab: Hashable { case agents, subscriptions, threads, spaces }
+enum Tab: String, Hashable { case agents, subscriptions, threads, spaces }
 
 struct RootView: View {
     @ObservedObject var spaces: Spaces
-    @State private var tab: Tab = .agents
+    @State private var tab: Tab = Tab(rawValue: ProcessInfo.processInfo.environment["CORA_DEMO_TAB"] ?? "") ?? .agents
 
     var body: some View {
         Group {
@@ -52,10 +52,11 @@ struct SpaceTabs: View {
     @ObservedObject var spaces: Spaces
     @ObservedObject var store: SpaceStore
     @Binding var tab: Tab
+    @State private var agentPath: [String] = ProcessInfo.processInfo.environment["CORA_DEMO_AGENT"].map { [$0] } ?? []
 
     var body: some View {
         TabView(selection: $tab) {
-            NavigationStack { AgentsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
+            NavigationStack(path: $agentPath) { AgentsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Agents", systemImage: "person.2") }.tag(Tab.agents)
             NavigationStack { SubscriptionsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Subscriptions", systemImage: "gauge.with.dots.needle.33percent") }.tag(Tab.subscriptions)

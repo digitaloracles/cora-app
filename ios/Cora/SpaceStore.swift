@@ -28,6 +28,20 @@ final class SpaceStore: ObservableObject, Identifiable {
         self.id = connection.server
     }
 
+    private var demo = false
+
+    /// Sample data and no server, for the simulator screenshots.
+    init(demo snapshot: Snapshot, steps: [String: [Step]]) {
+        connection = Connection(server: URL(string: snapshot.space.origin)!, spaceName: snapshot.space.name, userName: snapshot.user.name, email: snapshot.user.email, deviceId: "demo")
+        id = connection.server
+        self.snapshot = snapshot
+        self.steps = steps
+        phase = .ready
+        streamOnline = true
+        refreshedAt = Date().addingTimeInterval(-40)
+        demo = true
+    }
+
     init(connection: Connection, token: String) {
         self.connection = connection
         self.id = connection.server
@@ -38,6 +52,7 @@ final class SpaceStore: ObservableObject, Identifiable {
 
     /// Starts reading: a snapshot now and every minute, and the live stream while the app is in front.
     func start() {
+        if demo { return }
         if client == nil {
             guard let token = Storage.token(for: connection) else {
                 phase = .failed(String(localized: "The access of this iPhone is missing: connect the space again."))
@@ -64,6 +79,7 @@ final class SpaceStore: ObservableObject, Identifiable {
 
     func signOut() async {
         pause()
+        if demo { return }
         if let client { try? await client.signOut() }
         Storage.forget(connection)
         client = nil

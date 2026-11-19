@@ -19,9 +19,15 @@ final class Spaces: NSObject, ObservableObject, ASWebAuthenticationPresentationC
 
     override init() {
         super.init()
-        stores = Storage.loadConnections().map { SpaceStore(connection: $0) }
+        if Self.demo {
+            stores = [SpaceStore(demo: Samples.snapshot, steps: Samples.steps)]
+        } else {
+            stores = Storage.loadConnections().map { SpaceStore(connection: $0) }
+        }
         selected = stores.first?.id
     }
+
+    static var demo: Bool { ProcessInfo.processInfo.environment["CORA_DEMO"] == "1" }
 
     var current: SpaceStore? { stores.first { $0.id == selected } ?? stores.first }
 

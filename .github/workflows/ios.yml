@@ -7,6 +7,61 @@ on:
   workflow_dispatch:
 
 jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate
+      - name: Build for the simulator
+        run: |
+          set -o pipefail
+          xcodebuild build -project ios/CoraiOS.xcodeproj -scheme Cora -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/sim CODE_SIGNING_ALLOWED=NO 2>&1 | tail -40
+      - name: Screenshots with sample data
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          devices = json.load(sys.stdin)["devices"]
+          runtimes = sorted((k for k in devices if "iOS" in k), key=lambda k: [int(x) for x in re.findall(r"\d+", k)], reverse=True)
+          print(next(d["udid"] for k in runtimes for d in devices[k] if re.match(r"iPhone \d+ Pro$", d["name"])))')
+          echo "Simulator $DEVICE"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl status_bar "$DEVICE" override --time 9:41 --batteryLevel 100 --cellularBars 4 || true
+          xcrun simctl install "$DEVICE" build/sim/Build/Products/Debug-iphonesimulator/Cora.app
+          mkdir -p build/screenshots
+          shot() {
+            name=$1; shift
+            xcrun simctl terminate "$DEVICE" space.usecora.ios 2>/dev/null || true
+            env SIMCTL_CHILD_CORA_DEMO=1 "$@" xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "(it)" -AppleLocale it_IT
+            sleep 6
+            xcrun simctl io "$DEVICE" screenshot "build/screenshots/$name.png"
+          }
+          shot 1-agents SIMCTL_CHILD_CORA_DEMO_TAB=agents
+          shot 2-agent SIMCTL_CHILD_CORA_DEMO_TAB=agents SIMCTL_CHILD_CORA_DEMO_AGENT=ag_buzz
+          shot 3-subscriptions SIMCTL_CHILD_CORA_DEMO_TAB=subscriptions
+          shot 4-threads SIMCTL_CHILD_CORA_DEMO_TAB=threads
+          shot 5-spaces SIMCTL_CHILD_CORA_DEMO_TAB=spaces
+          xcrun simctl terminate "$DEVICE" space.usecora.ios 2>/dev/null || true
+          xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "(it)" -AppleLocale it_IT
+          sleep 6
+          xcrun simctl io "$DEVICE" screenshot build/screenshots/0-connect.png
+          ls -la build/screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-screenshots
+          path: build/screenshots
+          if-no-files-found: warn
+
   device:
     runs-on: macos-15
     timeout-minutes: 45
