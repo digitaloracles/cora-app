@@ -46,6 +46,15 @@ try {
     done.spent({ in: tokens[0], out: tokens[1] }); done.finish({ status: "ok", output: "done" });
   }
 
+  // Plans across threads: one in progress, one blocked, a finished one, and another owner's that must stay out.
+  const releasePlan = store.plans.create("800000000000000081", buzz.id, { name: "Plans in the apps", items: ["Server routes", "macOS page", "iOS list"] });
+  const advanced = store.plans.change("800000000000000081", buzz.id, "advance", { ...releasePlan, step: 1 });
+  const gate = store.plans.create("800000000000000082", ada.id, { name: "Gate the release", items: ["Wait for Phil"] });
+  store.plans.change("800000000000000082", ada.id, "update", { ...gate, blocked_reason: "Phil has not tried it yet" });
+  const finished = store.plans.create("800000000000000083", buzz.id, { name: "Ship version 0.2.11", items: ["Tag"] });
+  store.plans.change("800000000000000083", buzz.id, "advance", { ...finished, step: 1 });
+  store.plans.create("800000000000000084", hidden.id, { name: "Bob private plan", items: ["Hidden"] });
+
   // 1. The panel issues the link, as the button on notseb.usecora.space does for the signed-in person.
   const pairing = await f.request(f.alice, "/api/app/pairings", { method: "POST", body: {} });
   assert.equal(pairing.status, 201);
@@ -69,6 +78,11 @@ try {
   assert.match(print.stdout, /session: 63% left/);
   assert.match(print.stdout, /weekly: 16% left/);
   assert.ok(!print.stdout.includes("Hidden") && !print.stdout.includes("99"), "another owner's agent stays out");
+  assert.match(print.stdout, /Plans: 2 in progress, 1 recently finished/);
+  assert.match(print.stdout, /- \[active\] Plans in the apps · Buzz · .* · 1\/3\n    now: 2\. macOS page/);
+  assert.match(print.stdout, /- \[blocked\] Gate the release · Ada · .* · 0\/1\n(    now: .*\n)?    blocked: Phil has not tried it yet/);
+  assert.match(print.stdout, /- \[completed\] Ship version 0\.2\.11 · Buzz · .* · 1\/1/);
+  assert.ok(!print.stdout.includes("Bob private plan"), "another owner's plan stays out");
 
   // 2b. A second space on the same Mac: both stay connected, each read with its own token, and one can leave alone.
   const other = await knowledgeWorld();
@@ -112,6 +126,7 @@ try {
   await new Promise((resolveWait) => setTimeout(resolveWait, 400));
   live.add({ type: "thinking", text: thoughts[1] });
   live.spent({ in: 3200, out: 410 });
+  store.plans.change("800000000000000081", buzz.id, "advance", { ...advanced, step: 2 });
   const watched = await watching;
   writeFileSync(join(outPath, "watch.txt"), watched.stdout);
   note(watched.stdout);
@@ -120,6 +135,7 @@ try {
   assert.match(watched.stdout, new RegExp(`step Buzz ${live.id} \\[tool\\] shell`));
   assert.match(watched.stdout, new RegExp(`step Buzz ${live.id} \\[thinking\\] ${thoughts[1]}`));
   assert.ok(!watched.stdout.includes("Bob's live secret"), "another owner's live reasoning never reaches the app");
+  assert.match(watched.stdout, new RegExp(`plan Buzz ${advanced.id} active 2/3`), "plan changes arrive live");
 
   const working = await app(["--print"]);
   assert.match(working.stdout, /- Buzz \[working\]/);

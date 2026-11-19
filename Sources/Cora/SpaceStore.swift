@@ -22,6 +22,12 @@ final class SpaceStore: ObservableObject {
     /// A year of daily usage from the server; nil until read, or on servers without `/app/v1/usage`.
     @Published private(set) var history: UsageHistory?
     private var historyReadAt: Date?
+    /// Finished plans older than the snapshot's, read page by page when the person asks.
+    @Published private(set) var olderPlans: [Plan] = []
+    @Published private(set) var olderCursor: String?
+    @Published private(set) var loadingOlderPlans = false
+    /// The reasoning linked to checklist items, by `planId/itemId`, read when an item is opened.
+    @Published var planReasoning: [String: [Step]] = [:]
 
     private(set) var client: CoraClient?
     private var streamTask: Task<Void, Never>?
@@ -130,7 +136,7 @@ final class SpaceStore: ObservableObject {
         if let client { try? await client.signOut() }
         if let connection { Storage.forget(connection) }
         client = nil; connection = nil; snapshot = nil; steps = [:]; traces = [:]; streamOnline = false
-        history = nil; historyReadAt = nil
+        history = nil; historyReadAt = nil; olderPlans = []; olderCursor = nil; planReasoning = [:]
         phase = .disconnected
         onDisconnected(self)
     }
@@ -236,6 +242,9 @@ final class SpaceStore: ObservableObject {
                 scheduleRefresh()
             }
         case "subscription-usage", "agents", "agent-owners": scheduleRefresh()
+        case "plan":
+            if !event.planId.isEmpty { planReasoning = planReasoning.filter { !$0.key.hasPrefix(event.planId + "/") } }
+            scheduleRefresh()
         default: break
         }
     }
@@ -266,6 +275,35 @@ final class SpaceStore: ObservableObject {
     func loadThread(_ id: String) async -> ThreadDetail? {
         guard let client else { return nil }
         return try? await client.thread(id)
+    }
+
+    /// Every finished plan read so far, newest first: the snapshot's latest, then the older pages.
+    var planHistory: [Plan] {
+        let latest = snapshot?.plans?.history ?? []
+        let open = Set((snapshot?.plans?.open ?? []).map(\.id))
+        var seen = Set(latest.map(\.id))
+        let older = olderPlans.filter { !open.contains($0.id) && seen.insert($0.id).inserted }
+        return (latest + older).sorted { ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast) }
+    }
+
+    /// Whether older finished plans remain on the server.
+    var hasOlderPlans: Bool { olderPlans.isEmpty ? snapshot?.plans?.next != nil : olderCursor != nil }
+
+    func loadOlderPlans() async {
+        guard let client, !loadingOlderPlans, let cursor = olderPlans.isEmpty ? snapshot?.plans?.next : olderCursor else { return }
+        loadingOlderPlans = true
+        defer { loadingOlderPlans = false }
+        guard let page = try? await client.plans(history: true, before: cursor) else { return }
+        olderPlans += page.plans
+        olderCursor = page.next
+    }
+
+    func reasoningKey(_ plan: Plan, _ item: Plan.Item) -> String { "\(plan.id)/\(item.id)" }
+
+    /// The steps linked to one checklist item, oldest first.
+    func loadPlanReasoning(_ plan: Plan, _ item: Plan.Item) async {
+        guard let client, let page = try? await client.planTask(plan, item: item.id) else { return }
+        planReasoning[reasoningKey(plan, item)] = page.events.reversed().map(\.step)
     }
 
     func isPinned(_ account: Account) -> Bool { pins.contains(account.id) }

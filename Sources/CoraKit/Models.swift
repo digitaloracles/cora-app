@@ -69,6 +69,8 @@ public struct Snapshot: Decodable, Sendable {
     public var user: User
     public var accounts: [Account]
     public var agents: [Agent]
+    /// Plans across every thread; nil from servers that do not list them yet.
+    public var plans: PlanBoard?
 
     public struct Space: Decodable, Sendable, Hashable {
         public var name: String
@@ -84,7 +86,7 @@ public struct Snapshot: Decodable, Sendable {
         public init(id: String, name: String, email: String, role: String) { self.id = id; self.name = name; self.email = email; self.role = role }
     }
 
-    enum CodingKeys: String, CodingKey { case version, generatedAt, timezone, space, user, accounts, agents }
+    enum CodingKeys: String, CodingKey { case version, generatedAt, timezone, space, user, accounts, agents, plans }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -95,11 +97,15 @@ public struct Snapshot: Decodable, Sendable {
         user = try c.decode(User.self, forKey: .user)
         accounts = c.list(.accounts)
         agents = c.list(.agents)
+        plans = try? c.decodeIfPresent(PlanBoard.self, forKey: .plans)
     }
 
-    public init(version: Int = 1, generatedAt: Date? = Date(), timezone: String = "Europe/Rome", space: Space, user: User, accounts: [Account], agents: [Agent]) {
-        self.version = version; self.generatedAt = generatedAt; self.timezone = timezone; self.space = space; self.user = user; self.accounts = accounts; self.agents = agents
+    public init(version: Int = 1, generatedAt: Date? = Date(), timezone: String = "Europe/Rome", space: Space, user: User, accounts: [Account], agents: [Agent], plans: PlanBoard? = nil) {
+        self.version = version; self.generatedAt = generatedAt; self.timezone = timezone; self.space = space; self.user = user; self.accounts = accounts; self.agents = agents; self.plans = plans
     }
+
+    /// The open plans of one agent.
+    public func openPlans(of agentId: String) -> [Plan] { (plans?.open ?? []).filter { $0.agentId == agentId } }
 
     public func agent(_ id: String) -> Agent? { agents.first { $0.id == id } }
     public func accounts(of agent: Agent) -> [Account] { accounts.filter { agent.accountIds.contains($0.id) } }
@@ -544,5 +550,123 @@ extension Agent {
             let text = ([agent.name, agent.model] + agent.live.flatMap { [$0.threadName, $0.goal] } + agent.threads.map(\.name)).joined(separator: " ")
             return words.allSatisfy { text.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
         }
+    }
+}
+
+/// The plans an agent keeps in a thread: a checklist done in order, open (active or blocked) or finished (completed or closed).
+public struct Plan: Decodable, Sendable, Identifiable, Hashable {
+    public enum Status: String, Sendable { case active, blocked, completed, closed }
+
+    public struct Item: Decodable, Sendable, Identifiable, Hashable {
+        public var id: String
+        public var text: String
+        public init(id: String, text: String) { self.id = id; self.text = text }
+    }
+
+    /// A checklist item with reasoning linked to it, and how many steps.
+    public struct Reasoned: Decodable, Sendable, Identifiable, Hashable {
+        public var id: String
+        public var text: String
+        public var count: Int
+
+        enum CodingKeys: String, CodingKey { case id, text, count }
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id); text = c.text(.text); count = c.number(.count)
+        }
+        public init(id: String, text: String, count: Int) { self.id = id; self.text = text; self.count = count }
+    }
+
+    public var id: String
+    public var agentId: String
+    public var agentName: String
+    public var color: String
+    public var channelId: String
+    public var threadName: String
+    public var link: String
+    public var name: String
+    public var status: Status
+    public var items: [Item]
+    public var done: Int
+    public var blockedReason: String
+    public var updatedAt: Date?
+    public var tasks: [Reasoned]
+
+    enum CodingKeys: String, CodingKey { case id, agentId, agentName, color, channelId, threadName, link, name, status, items, done, blockedReason, updatedAt, tasksWithReasoning }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        agentId = c.text(.agentId); agentName = c.text(.agentName); color = c.text(.color); channelId = c.text(.channelId)
+        threadName = c.text(.threadName); link = c.text(.link); name = c.text(.name)
+        guard let status = Status(rawValue: c.text(.status)) else {
+            throw DecodingError.dataCorruptedError(forKey: .status, in: c, debugDescription: "Unknown plan status")
+        }
+        self.status = status
+        items = c.list(.items); done = c.number(.done); blockedReason = c.text(.blockedReason)
+        updatedAt = c.instant(.updatedAt); tasks = c.list(.tasksWithReasoning)
+    }
+
+    public init(id: String, agentId: String, agentName: String, color: String = "", channelId: String, threadName: String, link: String = "", name: String, status: Status, items: [Item], done: Int, blockedReason: String = "", updatedAt: Date?, tasks: [Reasoned] = []) {
+        self.id = id; self.agentId = agentId; self.agentName = agentName; self.color = color; self.channelId = channelId; self.threadName = threadName; self.link = link; self.name = name
+        self.status = status; self.items = items; self.done = done; self.blockedReason = blockedReason; self.updatedAt = updatedAt; self.tasks = tasks
+    }
+
+    public var isOpen: Bool { status == .active || status == .blocked }
+    /// 0 to 1, what share of the checklist is done.
+    public var progress: Double { items.isEmpty ? 0 : Double(min(done, items.count)) / Double(items.count) }
+    /// The item the agent works on now: the first not done, while the plan is open.
+    public var current: Item? { isOpen && done < items.count ? items[done] : nil }
+    public func reasoned(_ item: Item) -> Reasoned? { tasks.first { $0.id == item.id } }
+    public enum ItemState: Sendable { case done, current, blocked, pending, dropped }
+    public func state(of index: Int) -> ItemState {
+        if index < done { return .done }
+        if index == done && isOpen { return status == .blocked ? .blocked : .current }
+        return status == .closed ? .dropped : .pending
+    }
+}
+
+/// The snapshot's plans: every open one, the latest finished ones and the cursor for older history.
+public struct PlanBoard: Decodable, Sendable, Hashable {
+    public var open: [Plan]
+    public var history: [Plan]
+    public var next: String?
+
+    enum CodingKeys: String, CodingKey { case open, history, next }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        open = c.list(.open); history = c.list(.history)
+        next = try? c.decodeIfPresent(String.self, forKey: .next)
+    }
+    public init(open: [Plan], history: [Plan], next: String? = nil) { self.open = open; self.history = history; self.next = next }
+}
+
+/// A page of plans from `/app/v1/plans`.
+public struct PlanPage: Decodable, Sendable {
+    public var plans: [Plan]
+    public var next: String?
+
+    enum CodingKeys: String, CodingKey { case plans, next }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        plans = c.list(.plans); next = try? c.decodeIfPresent(String.self, forKey: .next)
+    }
+}
+
+/// The reasoning linked to one checklist item, newest first, paged by `next`.
+public struct PlanTaskReasoning: Decodable, Sendable {
+    public struct Event: Decodable, Sendable, Identifiable, Hashable {
+        public var seq: Int
+        public var traceId: String
+        public var step: Step
+        public var id: Int { seq }
+    }
+    public var events: [Event]
+    public var next: Int?
+
+    enum CodingKeys: String, CodingKey { case events, next }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        events = c.list(.events); next = try? c.decodeIfPresent(Int.self, forKey: .next)
     }
 }
