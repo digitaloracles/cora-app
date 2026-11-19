@@ -32,7 +32,8 @@ final class SpaceStore: ObservableObject, Identifiable {
 
     /// Sample data and no server, for the simulator screenshots.
     init(demo snapshot: Snapshot, steps: [String: [Step]]) {
-        connection = Connection(server: URL(string: snapshot.space.origin)!, spaceName: snapshot.space.name, userName: snapshot.user.name, email: snapshot.user.email, deviceId: "demo")
+        let connection = Connection(server: URL(string: snapshot.space.origin)!, spaceName: snapshot.space.name, userName: snapshot.user.name, email: snapshot.user.email, deviceId: "demo")
+        self.connection = connection
         id = connection.server
         self.snapshot = snapshot
         self.steps = steps
