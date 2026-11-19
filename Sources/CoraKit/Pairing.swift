@@ -22,7 +22,7 @@ public struct ConnectLink: Equatable, Sendable {
 }
 
 public enum Space {
-    /// `notseb.usecora.space`, `https://notseb.usecora.space/#/agenti` and the like become `https://notseb.usecora.space`.
+    /// `yourspace.usecora.space`, `https://yourspace.usecora.space/#/agenti` and the like become `https://yourspace.usecora.space`.
     public static func origin(_ input: String) -> URL? {
         var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }

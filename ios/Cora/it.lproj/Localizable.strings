@@ -64,7 +64,7 @@
 "The app will read the agents, quotas and live work you see in that space. It cannot change anything." = "L’app leggerà gli agenti, le quote e il lavoro dal vivo che vedi in quello spazio. Non può cambiare niente.";
 "Authorize this iPhone in the panel of %@." = "Autorizza questo iPhone nel pannello di %@.";
 "Connecting…" = "Collego…";
-"Write the address of your space, for example notseb.usecora.space." = "Scrivi l’indirizzo del tuo spazio, per esempio notseb.usecora.space.";
+"Write the address of your space, for example yourspace.usecora.space." = "Scrivi l’indirizzo del tuo spazio, per esempio yourspace.usecora.space.";
 "The panel did not answer." = "Il pannello non ha risposto.";
 "The panel could not be opened." = "Non riesco ad aprire il pannello.";
 "This link does not come from a Cora panel." = "Questo link non viene da un pannello Cora.";
