@@ -1,0 +1,67 @@
+name: iOS
+
+on:
+  push:
+    branches: [main, "buzz/**"]
+    paths: ["ios/**", "Sources/CoraKit/**", "Package.swift", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+jobs:
+  device:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate
+      - name: Install the App Store Connect key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+          chmod 600 "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+      - name: Archive and export a development build
+        run: |
+          set -o pipefail
+          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+                -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          xcodebuild archive -project ios/CoraiOS.xcodeproj -scheme Cora -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/Cora.xcarchive \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            "${AUTH[@]}" 2>&1 | tail -60
+          sed "s/TEAM_ID/$TEAM_ID/" ios/Config/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive -archivePath build/Cora.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/export "${AUTH[@]}" 2>&1 | tail -40
+          ls -la build/export
+      - name: Check the signature and the devices
+        run: |
+          mkdir -p build/check && cd build/check
+          unzip -q ../export/Cora.ipa
+          APP=Payload/Cora.app
+          codesign --verify --strict --verbose=2 "$APP"
+          codesign -dvv "$APP" 2>&1 | grep -E 'Identifier|Authority|TeamIdentifier'
+          security cms -D -i "$APP/embedded.mobileprovision" > profile.plist
+          /usr/libexec/PlistBuddy -c 'Print :Name' -c 'Print :ExpirationDate' -c 'Print :Entitlements:application-identifier' profile.plist
+          /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' profile.plist | sed 's/^/device /'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' -c 'Print :CFBundleShortVersionString' -c 'Print :CFBundleVersion' "$APP/Info.plist" | tee ../export/bundle.txt
+      - name: Remove the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cora-iOS
+          path: |
+            build/export/Cora.ipa
+            build/export/bundle.txt
+          if-no-files-found: error
