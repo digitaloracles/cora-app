@@ -21,6 +21,11 @@ struct ThreadsView: View {
             .refreshable { await store.refresh() }
         }
         .navigationTitle("Threads")
+        .navigationDestination(for: ThreadRoute.self) { route in
+            if let snapshot = store.snapshot, let entry = Self.entries(snapshot).first(where: { $0.thread.id == route.id }) {
+                ThreadDetailView(store: store, thread: entry.thread)
+            }
+        }
     }
 
     /// One entry per thread, with every agent in it; the newest activity first.
@@ -55,7 +60,10 @@ struct ThreadRow: View {
                 Spacer(minLength: 4)
                 if let at = thread.lastAt { Text(Format.ago(at)).font(.caption2).foregroundStyle(.secondary) }
             }
-            if !thread.reasoning.isEmpty {
+            let runs = store.liveIn(thread.id)
+            if !runs.isEmpty {
+                LiveNowLine(runs: runs)
+            } else if !thread.reasoning.isEmpty {
                 Text(thread.reasoning).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
             }
         }
@@ -63,7 +71,10 @@ struct ThreadRow: View {
     }
 }
 
-/// A thread's recent turns, each with its steps and output.
+/// Opens one thread from a navigation path, as the screenshots do.
+struct ThreadRoute: Hashable { let id: String }
+
+/// A thread's turns: the ones running now step by step from the stream, then the recent ones, read again whenever a turn starts or ends.
 struct ThreadDetailView: View {
     @ObservedObject var store: SpaceStore
     let thread: ThreadInfo
@@ -71,13 +82,32 @@ struct ThreadDetailView: View {
     @State private var loaded = false
 
     var body: some View {
+        let runs = store.liveIn(thread.id)
+        let running = Set(runs.map(\.id))
         List {
             if let url = URL(string: thread.link), !thread.link.isEmpty {
                 Link(destination: url) { Label("Open the thread", systemImage: "arrow.up.right.square") }
             }
+            ForEach(runs) { run in
+                Section {
+                    LiveTurnView(store: store, live: run.live)
+                } header: {
+                    HStack(spacing: 6) {
+                        LiveDot(size: 7)
+                        Text(String(localized: "\(run.agent.name) is working"))
+                        Spacer()
+                        if let start = run.live.startedAt {
+                            TimelineView(.periodic(from: .now, by: 1)) { context in
+                                Text(Format.elapsed(since: start, now: context.date)).monospacedDigit()
+                            }
+                        }
+                    }
+                }
+            }
             if let detail {
-                if detail.traces.isEmpty { Placeholder(text: String(localized: "No turns in this thread yet.")) }
-                ForEach(detail.traces) { trace in
+                let finished = detail.traces.filter { !running.contains($0.id) }
+                if finished.isEmpty && runs.isEmpty { Placeholder(text: String(localized: "No turns in this thread yet.")) }
+                ForEach(finished) { trace in
                     Section {
                         if !trace.goal.isEmpty { Text(trace.goal).font(.footnote).foregroundStyle(.secondary).lineLimit(4) }
                         ForEach(trace.steps.suffix(40)) { StepRow(step: $0) }
@@ -93,14 +123,22 @@ struct ThreadDetailView: View {
                 }
             } else if loaded {
                 Placeholder(text: String(localized: "This thread could not be read."))
-            } else {
+            } else if runs.isEmpty {
                 ProgressView()
             }
         }
         .listStyle(.insetGrouped)
         .navigationTitle(thread.name)
         .navigationBarTitleDisplayMode(.inline)
-        .task { detail = await store.loadThread(thread.id); loaded = true }
-        .refreshable { detail = await store.loadThread(thread.id) }
+        .task(id: reloadKey(running)) {
+            if let fresh = await store.loadThread(thread.id) { detail = fresh }
+            loaded = true
+        }
+        .refreshable { if let fresh = await store.loadThread(thread.id) { detail = fresh } }
+    }
+
+    /// Changes when a turn starts or ends here, or the thread has new activity: the finished turns are read again then.
+    func reloadKey(_ running: Set<String>) -> String {
+        running.sorted().joined(separator: ",") + "|" + (store.threadInfo(thread.id)?.lastAt?.timeIntervalSince1970.description ?? "")
     }
 }

@@ -60,6 +60,7 @@ jobs:
           shot 5-spaces SIMCTL_CHILD_CORA_DEMO_TAB=spaces
           shot 6-plans SIMCTL_CHILD_CORA_DEMO_TAB=plans
           shot 7-plan SIMCTL_CHILD_CORA_DEMO_TAB=plans SIMCTL_CHILD_CORA_DEMO_PLAN=plan_buzz SIMCTL_CHILD_CORA_DEMO_PLAN_ITEM=plan_buzz/item_3
+          shot 8-thread SIMCTL_CHILD_CORA_DEMO_TAB=threads SIMCTL_CHILD_CORA_DEMO_THREAD=1572562024360054865
           xcrun simctl terminate "$DEVICE" space.usecora.ios 2>/dev/null || true
           xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "($SHOT_LANGUAGE)" -AppleLocale "${SHOT_LANGUAGE}_$([ "$SHOT_LANGUAGE" = en ] && echo US || echo IT)"
           sleep 6

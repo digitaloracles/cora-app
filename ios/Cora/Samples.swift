@@ -113,4 +113,23 @@ enum Samples {
         return Snapshot(space: .init(name: "acme", origin: "https://acme.usecora.space"), user: .init(id: "u_alex", name: "Alex", email: "alex@example.com", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama, deepseek], agents: agents, plans: plans)
     }()
 
+
+    /// A thread's turns for the screenshots: the running one (shown live from the snapshot) and an earlier finished one.
+    static func threadDetail(_ id: String) -> ThreadDetail? {
+        let iso = ISO8601DateFormatter()
+        let at = { (seconds: Double) in iso.string(from: now.addingTimeInterval(seconds)) }
+        let json = #"""
+        {"thread":{"id":"\#(id)","name":"App macOS: quote e reasoning dal vivo","link":"https://discord.com/channels/1/2"},
+         "traces":[
+          {"id":"tr_buzz","agentId":"ag_buzz","agentName":"Buzz","kind":"chat","channelId":"\#(id)","startedAt":"\#(at(-195))","status":"running","steps":[]},
+          {"id":"tr_buzz_0","agentId":"ag_buzz","agentName":"Buzz","kind":"chat","channelId":"\#(id)","startedAt":"\#(at(-1500))","endedAt":"\#(at(-1320))","status":"ok",
+           "goal":"Seb sees the iOS build 7 on the install page.",
+           "output":"Build 7 (69a8f07) is on the install page; the IPA matches the CI one.",
+           "steps":[
+            {"type":"thinking","at":"\#(at(-1490))","text":"The page still serves build 5: I publish the CI artifact of main and compare the hashes."},
+            {"type":"tool","at":"\#(at(-1440))","name":"shell","args":{"command":"publish.sh ios-build 69a8f07"},"result":"published build 7"},
+            {"type":"text","at":"\#(at(-1330))","text":"Build 7 is on the install page."}]}]}
+        """#
+        return try? JSONDecoder().decode(ThreadDetail.self, from: Data(json.utf8))
+    }
 }

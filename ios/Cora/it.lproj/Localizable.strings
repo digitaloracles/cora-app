@@ -90,3 +90,5 @@
 "Closed" = "Chiuso";
 "Thread" = "Thread";
 "%lld of %lld steps" = "%1$lld di %2$lld passi";
+"%@ is working" = "%@ sta lavorando";
+"%@ are working" = "%@ stanno lavorando";

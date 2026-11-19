@@ -1,6 +1,13 @@
 import CoraKit
 import Foundation
 
+/// A turn running now, with the agent that runs it.
+struct LiveRun: Identifiable {
+    let agent: Agent
+    let live: LiveTrace
+    var id: String { live.traceId }
+}
+
 /// One space as the iPhone shows it: the last snapshot, the live steps from the event stream, the connection state.
 /// Reads only, like the Mac app; the single write is signing this iPhone out.
 @MainActor
@@ -196,7 +203,21 @@ final class SpaceStore: ObservableObject, Identifiable {
         }
     }
 
+    /// The turns running now in a thread or channel, from the snapshot the stream keeps current.
+    func liveIn(_ channelId: String, agentId: String? = nil) -> [LiveRun] {
+        guard let snapshot, !channelId.isEmpty else { return [] }
+        return snapshot.agents.filter { agentId == nil || $0.id == agentId }.flatMap { agent in
+            agent.live.filter { $0.channelId == channelId }.map { LiveRun(agent: agent, live: $0) }
+        }
+    }
+
+    /// A thread as the snapshot lists it now, with its latest activity.
+    func threadInfo(_ id: String) -> ThreadInfo? {
+        snapshot?.agents.flatMap(\.threads).filter { $0.id == id }.max { ($0.lastAt ?? .distantPast) < ($1.lastAt ?? .distantPast) }
+    }
+
     func loadThread(_ id: String) async -> ThreadDetail? {
+        if demo { return Samples.threadDetail(id) }
         guard let client else { return nil }
         return try? await client.thread(id)
     }

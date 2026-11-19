@@ -93,6 +93,8 @@ struct PlanRow: View {
             if plan.status == .blocked && !plan.blockedReason.isEmpty {
                 Label(plan.blockedReason, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange).lineLimit(3)
             }
+            let runs = store.liveIn(plan.channelId, agentId: plan.agentId)
+            if !runs.isEmpty { LiveNowLine(runs: runs) }
         }
         .padding(.vertical, 3)
     }
@@ -157,6 +159,22 @@ struct PlanDetailView: View {
                         Link(destination: url) { Label("Open the thread", systemImage: "arrow.up.right.square") }
                     }
                 }
+                ForEach(store.liveIn(plan.channelId, agentId: plan.agentId)) { run in
+                    Section {
+                        LiveTurnView(store: store, live: run.live)
+                    } header: {
+                        HStack(spacing: 6) {
+                            LiveDot(size: 7)
+                            Text(String(localized: "\(run.agent.name) is working"))
+                            Spacer()
+                            if let start = run.live.startedAt {
+                                TimelineView(.periodic(from: .now, by: 1)) { context in
+                                    Text(Format.elapsed(since: start, now: context.date)).monospacedDigit()
+                                }
+                            }
+                        }
+                    }
+                }
                 Section {
                     ForEach(Array(plan.items.enumerated()), id: \.element.id) { index, item in
                         checklistItem(plan, index: index, item: item)
@@ -173,7 +191,7 @@ struct PlanDetailView: View {
             .navigationTitle(plan.name)
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { await store.refresh() }
-            .task { for key in openItems { if let item = plan.items.first(where: { store.reasoningKey(plan, $0) == key || $0.id == key }) { await load(plan, item) } } }
+            .task(id: plan.updatedAt) { for key in openItems { if let item = plan.items.first(where: { store.reasoningKey(plan, $0) == key || $0.id == key }) { await load(plan, item) } } }
         } else {
             ContentUnavailableView("Plan not found", systemImage: "checklist")
         }

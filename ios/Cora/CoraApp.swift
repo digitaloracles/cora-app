@@ -53,6 +53,7 @@ struct SpaceTabs: View {
     @ObservedObject var store: SpaceStore
     @Binding var tab: Tab
     @State private var agentPath: [String] = ProcessInfo.processInfo.environment["CORA_DEMO_AGENT"].map { [$0] } ?? []
+    @State private var threadPath: [ThreadRoute] = ProcessInfo.processInfo.environment["CORA_DEMO_THREAD"].map { [ThreadRoute(id: $0)] } ?? []
     @State private var planPath: [PlanRoute] = ProcessInfo.processInfo.environment["CORA_DEMO_PLAN"].map { [PlanRoute(id: $0)] } ?? []
 
     var body: some View {
@@ -61,7 +62,7 @@ struct SpaceTabs: View {
                 .tabItem { Label("Agents", systemImage: "person.2") }.tag(Tab.agents)
             NavigationStack { SubscriptionsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Subscriptions", systemImage: "gauge.with.dots.needle.33percent") }.tag(Tab.subscriptions)
-            NavigationStack { ThreadsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
+            NavigationStack(path: $threadPath) { ThreadsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Threads", systemImage: "text.bubble") }.tag(Tab.threads)
             NavigationStack(path: $planPath) { PlansView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Plans", systemImage: "checklist") }.tag(Tab.plans)
