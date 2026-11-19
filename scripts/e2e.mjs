@@ -77,7 +77,10 @@ try {
   assert.match(print.stdout, /- Claude alice@claude\.test max used by Buzz, Ada/);
   assert.match(print.stdout, /session: 63% left/);
   assert.match(print.stdout, /weekly: 16% left/);
-  assert.ok(!print.stdout.includes("Hidden") && !print.stdout.includes("99"), "another owner's agent stays out");
+  const agentLines = print.stdout.split("\n").filter((line) => /^- .+ \[\w+\] .* today /.test(line));
+  assert.ok(agentLines.some((line) => line.startsWith("- Buzz ")) && agentLines.some((line) => line.startsWith("- Ada ")));
+  assert.ok(!agentLines.some((line) => line.startsWith("- Hidden ") || / today 100k /.test(line)), "another owner's agent stays out");
+  assert.ok(!print.stdout.includes("Hidden") && !print.stdout.includes("Bob's private reasoning"), "another owner's agent stays out");
   assert.match(print.stdout, /Plans: 2 in progress, 1 recently finished/);
   assert.match(print.stdout, /- \[active\] Plans in the apps · Buzz · .* · 1\/3\n    now: 2\. macOS page/);
   assert.match(print.stdout, /- \[blocked\] Gate the release · Ada · .* · 0\/1\n(    now: .*\n)?    blocked: Phil has not tried it yet/);
