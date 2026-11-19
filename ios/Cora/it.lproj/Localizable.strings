@@ -70,3 +70,5 @@
 "This link does not come from a Cora panel." = "Questo link non viene da un pannello Cora.";
 "The access of this iPhone is missing: connect the space again." = "Manca l’accesso di questo iPhone: collega di nuovo lo spazio.";
 "This iPhone was disconnected from the space. Connect it again from the panel." = "Questo iPhone è stato scollegato dallo spazio. Collegalo di nuovo dal pannello.";
+"1 turn" = "1 turno";
+"Disconnect this iPhone from %@" = "Scollega questo iPhone da %@";

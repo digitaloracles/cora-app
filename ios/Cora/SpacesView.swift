@@ -21,6 +21,7 @@ struct SpacesView: View {
                             if store.id == spaces.current?.id { Image(systemName: "checkmark").foregroundStyle(.tint) }
                         }
                     }
+                    .buttonStyle(.plain)
                     .swipeActions {
                         Button(role: .destructive) { leaving = store } label: { Label("Disconnect", systemImage: "link.badge.minus") }
                     }
@@ -29,6 +30,11 @@ struct SpacesView: View {
                 Text("Read only: the app sees the agents, quotas and live work you see in the panel and cannot change anything.")
             }
             Section { Button { adding = true } label: { Label("Add a space", systemImage: "plus") } }
+            if let current = spaces.current {
+                Section {
+                    Button(role: .destructive) { leaving = current } label: { Label(String(localized: "Disconnect this iPhone from \(current.title)"), systemImage: "link.badge.minus") }
+                }
+            }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Spaces")

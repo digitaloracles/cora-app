@@ -91,6 +91,8 @@ struct SpaceMenu: ToolbarContent {
                     Text(store.title).font(.subheadline.weight(.semibold))
                 }
             }
+            .fixedSize()
+            .padding(.horizontal, 4)
         }
     }
 }

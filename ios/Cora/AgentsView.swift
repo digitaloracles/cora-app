@@ -126,7 +126,7 @@ struct AgentDetailView: View {
         VStack(spacing: 2) {
             Text(title).font(.caption2).foregroundStyle(.secondary)
             Text(Format.tokens(tokens.total)).font(.headline).monospacedDigit()
-            Text("\(tokens.turns) turns").font(.caption2).foregroundStyle(.secondary)
+            Text(tokens.turns == 1 ? String(localized: "1 turn") : String(localized: "\(tokens.turns) turns")).font(.caption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
     }
