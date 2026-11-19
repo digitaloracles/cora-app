@@ -54,10 +54,10 @@ enum Samples {
     static let planItems = items(["Collect the sales figures", "Check them against the invoices", "Draw the charts", "Write the summary", "Share the report with the team"])
 
     static let plans: PlanBoard = {
-        let buzz = Plan(id: "plan_buzz", agentId: "ag_buzz", agentName: "Buzz", color: "#f2a93b", channelId: "1572562024360054865", threadName: "Quarterly report", link: "https://discord.com/channels/1/2",
+        let buzz = Plan(id: "plan_buzz", agentId: "ag_buzz", agentName: "Buzz", color: "#f2a93b", channelId: "1000000000000000001", threadName: "Quarterly report", link: "https://discord.com/channels/1/2",
                         name: "Q3 report for the team", status: .active, items: planItems, done: 3, updatedAt: now.addingTimeInterval(-240),
                         tasks: [Plan.Reasoned(id: planItems[0].id, text: planItems[0].text, count: 38), Plan.Reasoned(id: planItems[1].id, text: planItems[1].text, count: 12), Plan.Reasoned(id: planItems[2].id, text: planItems[2].text, count: 5), Plan.Reasoned(id: planItems[3].id, text: planItems[3].text, count: 3)])
-        let ada = Plan(id: "plan_ada", agentId: "ag_ada", agentName: "Ada", color: "#4f9cf7", channelId: "1570828502696075334", threadName: "Website launch",
+        let ada = Plan(id: "plan_ada", agentId: "ag_ada", agentName: "Ada", color: "#4f9cf7", channelId: "1000000000000000002", threadName: "Website launch",
                        name: "Launch the new website", status: .blocked, items: items(["Check every page on mobile", "Fix the broken links", "Client approves the home page"]), done: 2,
                        blockedReason: "Waiting for the client to approve the home page", updatedAt: now.addingTimeInterval(-3600 * 2))
         let history = [
@@ -98,11 +98,11 @@ enum Samples {
             usage: QuotaUsage(windows: [QuotaWindow(id: "ollama:monthly", kind: .custom, usedPercent: 21, resetsAt: now.addingTimeInterval(25 * 86400), minutes: 43200)]), agentIds: [])
         let deepseek = Account(id: "provider_deepseek", provider: "deepseek", label: "DeepSeek", server: true,
             usage: QuotaUsage(windows: [], balances: [Balance(kind: "total", currency: "USD", amount: "14.90"), Balance(kind: "granted", currency: "USD", amount: "0.00"), Balance(kind: "topped-up", currency: "USD", amount: "14.90")]), agentIds: [])
-        let live = LiveTrace(traceId: "tr_buzz", channelId: "1572562024360054865", threadName: "Quarterly report", link: "https://discord.com/channels/1/2",
+        let live = LiveTrace(traceId: "tr_buzz", channelId: "1000000000000000001", threadName: "Quarterly report", link: "https://discord.com/channels/1/2",
                              startedAt: now.addingTimeInterval(-195), model: "claude/claude-opus-5-5", goal: "The quarterly report is drafted, checked against the invoices and ready to share.", tokensIn: 184_200, tokensOut: 12_900, stepCount: 42, lastStep: thinking)
         let threads = [
-            ThreadInfo(id: "1572562024360054865", name: "Quarterly report", status: "active", lastAt: now, reasoning: thinking.text, tokensIn: 184_200, tokensOut: 12_900),
-            ThreadInfo(id: "1570828502696075334", name: "Website launch", listening: false, status: "ended", lastAt: now.addingTimeInterval(-3600 * 3), reasoning: "Every page works on mobile; the home page waits for the client."),
+            ThreadInfo(id: "1000000000000000001", name: "Quarterly report", status: "active", lastAt: now, reasoning: thinking.text, tokensIn: 184_200, tokensOut: 12_900),
+            ThreadInfo(id: "1000000000000000002", name: "Website launch", listening: false, status: "ended", lastAt: now.addingTimeInterval(-3600 * 3), reasoning: "Every page works on mobile; the home page waits for the client."),
         ]
         let agents = [
             Agent(id: "ag_buzz", name: "Buzz", color: "#f2a93b", model: "claude/claude-opus-5-5", state: .working, accountIds: ["sub_claude"], usage: usage(52_000), live: [live], threads: threads),
@@ -110,7 +110,7 @@ enum Samples {
             Agent(id: "ag_nico", name: "Nico", color: "#e05aa5", model: "codex/gpt-6", state: .idle, accountIds: ["sub_codex"], usage: usage(18_000)),
             Agent(id: "ag_radix", name: "Radix", color: "#3fbf8f", enabled: false, model: "hermes/kimi-k3", state: .off, accountIds: ["sub_kimi"], usage: usage(4_000)),
         ]
-        return Snapshot(space: .init(name: "acme", origin: "https://acme.usecora.space"), user: .init(id: "u_seb", name: "Alex", email: "alex@example.com", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama, deepseek], agents: agents, plans: plans)
+        return Snapshot(space: .init(name: "acme", origin: "https://acme.usecora.space"), user: .init(id: "u_alex", name: "Alex", email: "alex@example.com", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama, deepseek], agents: agents, plans: plans)
     }()
 
 }

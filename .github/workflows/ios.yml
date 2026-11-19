@@ -7,7 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       language:
-        description: Language of the simulator screenshots (it, en)
+        description: Language of the simulator screenshots
+        type: choice
+        options: [it, en]
         default: it
 
 jobs:
