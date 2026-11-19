@@ -32,6 +32,11 @@ final class Spaces: NSObject, ObservableObject, ASWebAuthenticationPresentationC
     var current: SpaceStore? { stores.first { $0.id == selected } ?? stores.first }
 
     func startAll() { stores.forEach { $0.start() } }
+
+    /// Gives this phone's APNs token to every connected space; a space that does not know notifications yet just refuses.
+    func registerPush(_ token: String, environment: String) {
+        for store in stores { Task { await store.registerPush(token, environment: environment) } }
+    }
     func pauseAll() { stores.forEach { $0.pause() } }
 
     /// Opens the panel of the space, signed in there, to authorize this iPhone; the panel answers with a cora:// link.

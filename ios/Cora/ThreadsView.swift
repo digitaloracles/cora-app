@@ -22,9 +22,9 @@ struct ThreadsView: View {
         }
         .navigationTitle("Threads")
         .navigationDestination(for: ThreadRoute.self) { route in
-            if let snapshot = store.snapshot, let entry = Self.entries(snapshot).first(where: { $0.thread.id == route.id }) {
-                ThreadDetailView(store: store, thread: entry.thread)
-            }
+            let thread = store.snapshot.flatMap { Self.entries($0).first(where: { $0.thread.id == route.id })?.thread }
+                ?? ThreadInfo(id: route.id, name: String(localized: "Thread"), status: "", lastAt: nil, reasoning: "")
+            ThreadDetailView(store: store, thread: thread)
         }
     }
 

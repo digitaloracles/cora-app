@@ -216,6 +216,11 @@ final class SpaceStore: ObservableObject, Identifiable {
         snapshot?.agents.flatMap(\.threads).filter { $0.id == id }.max { ($0.lastAt ?? .distantPast) < ($1.lastAt ?? .distantPast) }
     }
 
+    func registerPush(_ token: String, environment: String) async {
+        guard !demo, let client else { return }
+        try? await client.registerPush(token: token, environment: environment)
+    }
+
     func loadThread(_ id: String) async -> ThreadDetail? {
         if demo { return Samples.threadDetail(id) }
         guard let client else { return nil }

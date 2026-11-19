@@ -3,16 +3,29 @@ import SwiftUI
 
 @main
 struct CoraApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var spaces = Spaces()
+    @StateObject private var notices = Notices.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             RootView(spaces: spaces)
                 .onOpenURL { spaces.handle($0) }
+                .onChange(of: notices.token) { _, token in if let token { spaces.registerPush(token, environment: notices.environment) } }
+                .onChange(of: spaces.stores.count) { _, count in
+                    guard count > 0 && !Spaces.demo else { return }
+                    notices.ask()
+                    if let token = notices.token { spaces.registerPush(token, environment: notices.environment) }
+                }
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
-                    case .active: spaces.startAll()
+                    case .active:
+                        spaces.startAll()
+                        if !spaces.stores.isEmpty && !Spaces.demo {
+                            notices.ask()
+                            if let token = notices.token { spaces.registerPush(token, environment: notices.environment) }
+                        }
                     case .background: spaces.pauseAll()
                     default: break
                     }
@@ -71,6 +84,14 @@ struct SpaceTabs: View {
                 .tabItem { Label("Spaces", systemImage: "square.stack") }.tag(Tab.spaces)
         }
         .onChange(of: store.revoked) { _, revoked in if revoked { spaces.forget(store) } }
+        .onReceive(Notices.shared.$target) { target in
+            guard let target else { return }
+            switch target {
+            case .plan(let id): tab = .plans; planPath = [PlanRoute(id: id)]
+            case .thread(let id): tab = .threads; threadPath = [ThreadRoute(id: id)]
+            }
+            Notices.shared.target = nil
+        }
     }
 }
 

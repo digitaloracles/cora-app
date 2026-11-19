@@ -87,6 +87,15 @@ public struct CoraClient: Sendable {
         try Self.check(data, response)
     }
 
+    /// Hands the space this device's APNs token, so its notifications reach the phone; the only other write besides signing out.
+    public func registerPush(token: String, environment: String) async throws {
+        var request = request("/app/v1/push", method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["token": token, "environment": environment])
+        let (data, response) = try await session.data(for: request)
+        try Self.check(data, response)
+    }
+
     public func avatarURL(_ path: String) -> URL? { path.isEmpty ? nil : URL(string: server.absoluteString + path) }
 
     /// The space's live events: every reasoning step of this person's agents, as it happens.
