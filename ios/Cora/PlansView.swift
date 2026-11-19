@@ -159,6 +159,17 @@ struct PlanDetailView: View {
                         Link(destination: url) { Label("Open the thread", systemImage: "arrow.up.right.square") }
                     }
                 }
+                Section {
+                    ForEach(Array(plan.items.enumerated()), id: \.element.id) { index, item in
+                        checklistItem(plan, index: index, item: item)
+                    }
+                } header: {
+                    HStack {
+                        Text("Checklist")
+                        Spacer()
+                        if let at = plan.updatedAt { Text(Format.ago(at)) }
+                    }
+                }
                 ForEach(store.liveIn(plan.channelId, agentId: plan.agentId)) { run in
                     Section {
                         LiveTurnView(store: store, live: run.live)
@@ -173,17 +184,6 @@ struct PlanDetailView: View {
                                 }
                             }
                         }
-                    }
-                }
-                Section {
-                    ForEach(Array(plan.items.enumerated()), id: \.element.id) { index, item in
-                        checklistItem(plan, index: index, item: item)
-                    }
-                } header: {
-                    HStack {
-                        Text("Checklist")
-                        Spacer()
-                        if let at = plan.updatedAt { Text(Format.ago(at)) }
                     }
                 }
             }
