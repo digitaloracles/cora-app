@@ -110,11 +110,8 @@ struct PlanHistoryRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(plan.name).font(.subheadline.weight(.medium)).lineLimit(2)
                 Text(PlanText.place(plan, agent: true)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                HStack(spacing: 6) {
-                    Text(PlanText.count(plan))
-                    if let at = plan.updatedAt { Text("·"); Text(at.formatted(date: .abbreviated, time: .shortened)) }
-                }
-                .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                Text(plan.updatedAt.map { PlanText.count(plan) + " · " + $0.formatted(.dateTime.day().month(.abbreviated).hour().minute()) } ?? PlanText.count(plan))
+                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
             }
             Spacer(minLength: 6)
             PlanStatusBadge(status: plan.status)
