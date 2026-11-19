@@ -81,12 +81,14 @@ struct PlanCard: View {
     let plan: Plan
     /// Inside an agent's page the agent is already on screen.
     var showAgent = true
+    /// In the menu bar popover: a smaller face and tighter spacing for its narrow width.
+    var compact = false
 
     var body: some View {
         let tint = plan.status == .blocked ? Color.orange : PlanAgentFace.tint(plan, store.snapshot)
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                if showAgent { PlanAgentFace(store: store, plan: plan, size: 28) }
+        VStack(alignment: .leading, spacing: compact ? 8 : 10) {
+            HStack(alignment: .top, spacing: compact ? 8 : 10) {
+                if showAgent { PlanAgentFace(store: store, plan: plan, size: compact ? 24 : 28) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(plan.name).font(.system(size: 13, weight: .semibold)).lineLimit(2)
                     Text(PlanText.place(plan, agent: showAgent)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
@@ -107,7 +109,7 @@ struct PlanCard: View {
             }
             PlanChecklist(store: store, plans: plans, plan: plan)
         }
-        .padding(12)
+        .padding(compact ? 10 : 12)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint.opacity(0.35), lineWidth: 1))
     }
@@ -118,6 +120,8 @@ struct PlanHistoryRow: View {
     @ObservedObject var store: SpaceStore
     @ObservedObject var plans: PlanSelection
     let plan: Plan
+    /// In the menu bar popover the icon already says completed or closed, and the time is relative.
+    var compact = false
 
     var body: some View {
         let open = plans.openPlans.contains(plan.id)
@@ -133,9 +137,9 @@ struct PlanHistoryRow: View {
                         Text(PlanText.place(plan, agent: true) + " · " + PlanText.count(plan)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                     }
                     Spacer(minLength: 8)
-                    PlanStatusBadge(status: plan.status)
+                    if !compact { PlanStatusBadge(status: plan.status) }
                     if let at = plan.updatedAt {
-                        Text(at.formatted(date: .abbreviated, time: .shortened)).font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
+                        Text(compact ? Format.ago(at) : at.formatted(date: .abbreviated, time: .shortened)).font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
                     }
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(open ? 90 : 0))
