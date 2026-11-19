@@ -82,7 +82,7 @@ enum CLI {
             case .renderLive(let directory):
                 guard let connection = Storage.loadConnection() else { throw ClientError.unauthorized("Not connected: run --connect with a link from the panel.") }
                 let store = SpaceStore(connection: connection)
-                store.start()
+                await store.startAndWait()
                 await store.refresh()
                 guard let snapshot = store.snapshot else { throw ClientError.invalidResponse }
                 let selection = LiveSelection()

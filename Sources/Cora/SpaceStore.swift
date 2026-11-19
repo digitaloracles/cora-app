@@ -33,6 +33,8 @@ final class SpaceStore: ObservableObject {
     private var streamTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
     private var pendingRefresh: Task<Void, Never>?
+    private var keychainTask: Task<Void, Never>?
+    private var keychainAttempt: UUID?
     private let maxSteps = 300
     /// Told when this Mac is paired with a space, and when the person disconnects it, so the list of spaces follows.
     var onConnected: (SpaceStore) -> Void = { _ in }
@@ -54,16 +56,35 @@ final class SpaceStore: ObservableObject {
         }
     }
 
+    /// Reads the token off the main thread: a Keychain that does not answer (lid closed, locked session) must not freeze the app.
     func start() {
         guard let connection else { phase = .disconnected; return }
-        guard let token = Storage.token(for: connection) else {
-            // A Keychain that is not readable yet (wake, first unlock) keeps the pairing and tries again later.
-            self.connection = connection
-            phase = .failed(String(localized: "The Keychain is locked: unlock your Mac to read this space."))
-            Task { try? await Task.sleep(nanoseconds: 30_000_000_000); if self.client == nil, self.connection != nil { self.start() } }
-            return
+        if snapshot == nil { phase = .connecting }
+        let attempt = UUID()
+        keychainAttempt = attempt
+        let slow = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard let self, !Task.isCancelled, self.keychainAttempt == attempt, self.client == nil else { return }
+            self.phase = .failed(String(localized: "Waiting for the Keychain: unlock your Mac to read this space."))
         }
-        attach(connection, token: token)
+        keychainTask = Task { [weak self] in
+            let token = await Task.detached(priority: .userInitiated) { Storage.token(for: connection) }.value
+            slow.cancel()
+            guard let self, self.keychainAttempt == attempt, self.connection?.server == connection.server else { return }
+            guard let token else {
+                // A Keychain that is not readable yet (wake, first unlock) keeps the pairing and tries again later.
+                self.phase = .failed(String(localized: "The Keychain is locked: unlock your Mac to read this space."))
+                Task { try? await Task.sleep(nanoseconds: 30_000_000_000); if self.client == nil, self.connection != nil, self.keychainAttempt == attempt { self.start() } }
+                return
+            }
+            self.attach(self.connection ?? connection, token: token)
+        }
+    }
+
+    /// `start`, then waits until the token is read and the space attached (the CLI renders right after).
+    func startAndWait() async {
+        start()
+        await keychainTask?.value
     }
 
     private func attach(_ connection: Connection, token: String) {

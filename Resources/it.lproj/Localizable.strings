@@ -123,3 +123,4 @@
 "Closed" = "Chiuso";
 "Thread" = "Thread";
 "%lld of %lld steps" = "%1$lld di %2$lld passi";
+"Waiting for the Keychain: unlock your Mac to read this space." = "Attendo il portachiavi: sblocca il Mac per leggere questo spazio.";
