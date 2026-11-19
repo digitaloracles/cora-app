@@ -90,6 +90,14 @@ struct AgentDetailView: View {
                         ForEach(accounts) { SubscriptionRow(store: store, account: $0, title: $0.displayName) }
                     }
                 }
+                let plans = snapshot.openPlans(of: agent.id)
+                if !plans.isEmpty {
+                    Section("Plans") {
+                        ForEach(plans) { plan in
+                            NavigationLink { PlanDetailView(store: store, planId: plan.id) } label: { PlanRow(store: store, plan: plan, showAgent: false) }
+                        }
+                    }
+                }
                 ForEach(agent.live) { live in
                     Section {
                         LiveTurnView(store: store, live: live)

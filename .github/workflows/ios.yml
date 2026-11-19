@@ -50,6 +50,8 @@ jobs:
           shot 3-subscriptions SIMCTL_CHILD_CORA_DEMO_TAB=subscriptions
           shot 4-threads SIMCTL_CHILD_CORA_DEMO_TAB=threads
           shot 5-spaces SIMCTL_CHILD_CORA_DEMO_TAB=spaces
+          shot 6-plans SIMCTL_CHILD_CORA_DEMO_TAB=plans
+          shot 7-plan SIMCTL_CHILD_CORA_DEMO_TAB=plans SIMCTL_CHILD_CORA_DEMO_PLAN=plan_buzz SIMCTL_CHILD_CORA_DEMO_PLAN_ITEM=plan_buzz/item_3
           xcrun simctl terminate "$DEVICE" space.usecora.ios 2>/dev/null || true
           xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "(it)" -AppleLocale it_IT
           sleep 6

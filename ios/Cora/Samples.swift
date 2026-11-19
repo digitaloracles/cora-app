@@ -49,6 +49,35 @@ enum Samples {
         thinking,
     ]]
 
+    static func items(_ texts: [String]) -> [Plan.Item] { texts.enumerated().map { Plan.Item(id: "item_\($0.offset)", text: $0.element) } }
+
+    static let planItems = items(["Server: /app/v1/plans and plans in the snapshot", "Tests on the touched parts", "macOS: Plans page in the window", "iOS: plans in progress and history", "Release and install on the MacBook"])
+
+    static let plans: PlanBoard = {
+        let buzz = Plan(id: "plan_buzz", agentId: "ag_buzz", agentName: "Buzz", color: "#f2a93b", channelId: "1572562024360054865", threadName: "App macOS: quote e reasoning dal vivo", link: "https://discord.com/channels/1/2",
+                        name: "Plans in the API and the apps", status: .active, items: planItems, done: 3, updatedAt: now.addingTimeInterval(-240),
+                        tasks: [Plan.Reasoned(id: planItems[0].id, text: planItems[0].text, count: 38), Plan.Reasoned(id: planItems[1].id, text: planItems[1].text, count: 12), Plan.Reasoned(id: planItems[2].id, text: planItems[2].text, count: 5), Plan.Reasoned(id: planItems[3].id, text: planItems[3].text, count: 3)])
+        let ada = Plan(id: "plan_ada", agentId: "ag_ada", agentName: "Ada", color: "#4f9cf7", channelId: "1570828502696075334", threadName: "Import Airbnb",
+                       name: "Gate MTR-1468 on production", status: .blocked, items: items(["Read the release notes", "Run the gate on staging", "Phil checks while signed in"]), done: 2,
+                       blockedReason: "Waiting for Phil to try it while signed in", updatedAt: now.addingTimeInterval(-3600 * 2))
+        let history = [
+            Plan(id: "plan_h1", agentId: "ag_nico", agentName: "Nico", color: "#e05aa5", channelId: "1571", threadName: "Fish voice per agent", name: "One Fish key per agent", status: .completed,
+                 items: items(["Store the key per agent", "Read it in the voice call", "Test on Dopamina"]), done: 3, updatedAt: now.addingTimeInterval(-86400)),
+            Plan(id: "plan_h2", agentId: "ag_buzz", agentName: "Buzz", color: "#f2a93b", channelId: "1572", threadName: "REF-121 geo sweep", name: "Gate the geo sweep", status: .completed,
+                 items: items(["Migrate a clean database", "Run the touched tests", "Comment on the PR"]), done: 3, updatedAt: now.addingTimeInterval(-86400 * 1.4)),
+            Plan(id: "plan_h3", agentId: "ag_radix", agentName: "Radix", color: "#3fbf8f", channelId: "1573", threadName: "Docker on the Mac Pro", name: "Restart Docker without a password", status: .closed,
+                 items: items(["Find what stopped it", "Repair vmnetd", "Check the three sites"]), done: 1, updatedAt: now.addingTimeInterval(-86400 * 3)),
+        ]
+        return PlanBoard(open: [buzz, ada], history: history, next: "older")
+    }()
+
+    /// The reasoning linked to the iOS step of Buzz's plan, opened in the plan screenshot.
+    static let planReasoning: [String: [Step]] = ["plan_buzz/item_3": [
+        Step(kind: .thinking, at: now.addingTimeInterval(-300), text: "CoraKit already decodes the plans: the iPhone needs a Plans tab, a detail per plan and the open ones on the agent page."),
+        Step(kind: .tool, at: now.addingTimeInterval(-200), name: "shell", args: "{command: \"xcodebuild build -scheme Cora\"}", result: "** BUILD SUCCEEDED **"),
+        Step(kind: .text, at: now.addingTimeInterval(-120), text: "Plans tab ready: in progress, history, and the reasoning of each step."),
+    ]]
+
     static let snapshot: Snapshot = {
         let reset5h = now.addingTimeInterval(2 * 3600 + 600), resetWeek = now.addingTimeInterval(3 * 86400 + 4 * 3600)
         let claude = Account(id: "sub_claude", provider: "claude", label: "Claude Max", email: "seb@usecora.space", plan: "max",
@@ -81,7 +110,7 @@ enum Samples {
             Agent(id: "ag_nico", name: "Nico", color: "#e05aa5", model: "codex/gpt-6", state: .idle, accountIds: ["sub_codex"], usage: usage(18_000)),
             Agent(id: "ag_radix", name: "Radix", color: "#3fbf8f", enabled: false, model: "hermes/kimi-k3", state: .off, accountIds: ["sub_kimi"], usage: usage(4_000)),
         ]
-        return Snapshot(space: .init(name: "notseb", origin: "https://notseb.usecora.space"), user: .init(id: "u_seb", name: "Sebastiano", email: "seb@usecora.space", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama, deepseek], agents: agents)
+        return Snapshot(space: .init(name: "notseb", origin: "https://notseb.usecora.space"), user: .init(id: "u_seb", name: "Sebastiano", email: "seb@usecora.space", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama, deepseek], agents: agents, plans: plans)
     }()
 
 }

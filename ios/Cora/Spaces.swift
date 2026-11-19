@@ -20,7 +20,7 @@ final class Spaces: NSObject, ObservableObject, ASWebAuthenticationPresentationC
     override init() {
         super.init()
         if Self.demo {
-            stores = [SpaceStore(demo: Samples.snapshot, steps: Samples.steps)]
+            stores = [SpaceStore(demo: Samples.snapshot, steps: Samples.steps, planReasoning: Samples.planReasoning)]
         } else {
             stores = Storage.loadConnections().map { SpaceStore(connection: $0) }
         }
