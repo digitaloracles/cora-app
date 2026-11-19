@@ -4,8 +4,8 @@ Native macOS menu bar app (Swift 6 toolchain, Swift 5 language mode, AppKit + Sw
 
 ## Layout
 
-- `Sources/CoraKit`: models of the app API (`Snapshot`, `Agent`, `Account`, `QuotaWindow`, `Step`, `TraceDetail`), the `cora://connect` link and space addresses (`Pairing.swift`), the HTTP and SSE client (`Client.swift`), Keychain and connection storage (`Storage.swift`), formatting. No UI. Decoding is lenient: unknown kinds and broken list items are skipped, never fatal, because the server may be newer than the app.
-- `Sources/Cora`: the app. `SpaceStore` (connection, snapshot, live steps), `StatusItemController` (menu bar + popover), `PopoverView`, `LiveWindow`, `Components`, `CLI` (command line and rendering), `Samples` (preview data).
+- `Sources/CoraKit`: models of the app API (`Snapshot`, `Agent`, `Account`, `QuotaWindow`, `Step`, `TraceDetail`, `Plan`, `PlanBoard`), the `cora://connect` link and space addresses (`Pairing.swift`), the HTTP and SSE client (`Client.swift`), Keychain and connection storage (`Storage.swift`), formatting. No UI. Decoding is lenient: unknown kinds and broken list items are skipped, never fatal, because the server may be newer than the app.
+- `Sources/Cora`: the app. `SpaceStore` (connection, snapshot, live steps, older plans, plan reasoning), `StatusItemController` (menu bar + popover), `PopoverView`, `LiveWindow`, `PlansView` (plans in progress and history), `Components`, `CLI` (command line and rendering), `Samples` (preview data).
 - `Tests/CoraKitTests`: Swift Testing suites with a JSON fixture of the snapshot.
 - `scripts/e2e.mjs`: end-to-end check against a real Cora server started from a `digitaloracles/cora` checkout (its `test/knowledge-fixtures.js`).
 - `DESIGN.md`: read before any UI change; update it when adding patterns.

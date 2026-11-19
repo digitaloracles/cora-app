@@ -55,6 +55,7 @@ enum CLI {
                             guard let step = event.step else { continue }
                             Swift.print("step \(names[event.agentId] ?? "?") \(event.traceId) [\(step.kind.rawValue)] \(step.headline.replacingOccurrences(of: "\n", with: " ").prefix(200))")
                         case ("trace", "end"): Swift.print("end \(names[event.trace?.agentId ?? ""] ?? "?") \(event.trace?.id ?? "") \(event.trace?.status ?? "")")
+                        case ("plan", _): Swift.print("plan \(names[event.agentId] ?? "?") \(event.planId) \(event.status) \(event.done)/\(event.total)")
                         case ("access-revoked", _): Swift.print("live: access revoked"); return
                         default: Swift.print("event \(event.type)")
                         }
@@ -70,7 +71,14 @@ enum CLI {
                     Swift.print("Disconnected from \(connection.host)")
                 } else { Swift.print("Not connected") }
             case .renderPreview(let directory):
-                try render(store: SpaceStore(preview: Samples.snapshot, pins: ["sub_codex", "sub_claude", "sub_claude_buzz", "sub_grok", "provider_deepseek"], history: Samples.history), selection: Samples.selection(), directory: directory, steps: Samples.steps)
+                let store = SpaceStore(preview: Samples.snapshot, pins: ["sub_codex", "sub_claude", "sub_claude_buzz", "sub_grok", "provider_deepseek"], history: Samples.history)
+                let selection = Samples.selection()
+                let plan = Samples.plans.open[0]
+                let key = store.reasoningKey(plan, plan.items[0])
+                store.planReasoning[key] = Samples.planSteps
+                selection.plans.openItems.insert(key)
+                selection.plans.openPlans.insert("plan_h3")
+                try render(store: store, selection: selection, directory: directory, steps: Samples.steps)
             case .renderLive(let directory):
                 guard let connection = Storage.loadConnection() else { throw ClientError.unauthorized("Not connected: run --connect with a link from the panel.") }
                 let store = SpaceStore(connection: connection)
@@ -121,6 +129,14 @@ enum CLI {
             let accounts = snapshot.accounts(of: agent).map { Providers.name($0.provider) + ($0.email.isEmpty ? "" : " " + $0.email) }
             if !accounts.isEmpty { out += "    runs on \(accounts.joined(separator: ", "))\n" }
         }
+        if let plans = snapshot.plans {
+            out += "Plans: \(plans.open.count) in progress, \(plans.history.count) recently finished\(plans.next == nil ? "" : " (older on the server)")\n"
+            for plan in plans.open + plans.history {
+                out += "- [\(plan.status.rawValue)] \(plan.name) · \(plan.agentName) · \(plan.threadName.isEmpty ? plan.channelId : plan.threadName) · \(min(plan.done, plan.items.count))/\(plan.items.count)\n"
+                if let current = plan.current { out += "    now: \(plan.done + 1). \(current.text)\n" }
+                if plan.status == .blocked, !plan.blockedReason.isEmpty { out += "    blocked: \(plan.blockedReason)\n" }
+            }
+        }
         out += "Accounts: \(snapshot.accounts.count)\n"
         for account in snapshot.accounts {
             out += "- \(Providers.name(account.provider)) \(account.email.isEmpty ? account.label : account.email) \(account.plan) used by \(account.agentIds.compactMap { snapshot.agent($0)?.name }.joined(separator: ", "))\n"
@@ -168,6 +184,12 @@ enum CLI {
             for width in [CGFloat(460), 760, 1200] {
                 try snapshot(TokensPage(store: store, selection: selection, snapshot: store.snapshot!).environment(\.isStaticPreview, true), width: width, height: nil, appearance: appearance,
                              to: folder.appendingPathComponent("tokens-page-\(Int(width))-\(name).png"))
+            }
+            selection.agentId = LiveSelection.plans
+            try snapshot(LiveWindow(store: store, selection: selection), width: 1000, height: 700, appearance: appearance, to: folder.appendingPathComponent("window-plans-\(name).png"))
+            for width in [CGFloat(460), 900] {
+                try snapshot(PlansPage(store: store, plans: selection.plans, snapshot: store.snapshot!).environment(\.isStaticPreview, true), width: width, height: nil, appearance: appearance,
+                             to: folder.appendingPathComponent("plans-page-\(Int(width))-\(name).png"))
             }
             selection.agentId = agent
             var other = store.snapshot!

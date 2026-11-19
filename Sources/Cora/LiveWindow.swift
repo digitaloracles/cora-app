@@ -7,8 +7,12 @@ final class LiveSelection: ObservableObject {
     @Published var threadDetail: ThreadDetail?
     @Published var loadingThread = false
 
-    /// The sidebar entry of the Tokens page, beside the agents' ids.
+    /// What the plans unfold, kept while the window is open.
+    let plans = PlanSelection()
+
+    /// The sidebar entries of the Tokens and Plans pages, beside the agents' ids.
     static let tokens = "#tokens"
+    static let plans = "#plans"
 }
 
 /// The live window: agents on the left; on the right what the selected one is doing now, its threads and its usage.
@@ -29,6 +33,9 @@ struct LiveWindow: View {
                 }
                 Label("Tokens", systemImage: "gauge.with.dots.needle.33percent").font(.system(size: 13, weight: .medium))
                     .tag(LiveSelection.tokens)
+                Label("Plans", systemImage: "checklist").font(.system(size: 13, weight: .medium))
+                    .badge(store.snapshot?.plans?.open.count ?? 0)
+                    .tag(LiveSelection.plans)
                 Section("Agents") {
                 ForEach(store.snapshot?.agents ?? []) { agent in
                     HStack(spacing: 8) {
@@ -46,6 +53,8 @@ struct LiveWindow: View {
         } detail: {
             if selection.agentId == LiveSelection.tokens, let snapshot = store.snapshot {
                 TokensPage(store: store, selection: selection, snapshot: snapshot)
+            } else if selection.agentId == LiveSelection.plans, let snapshot = store.snapshot {
+                PlansPage(store: store, plans: selection.plans, snapshot: snapshot)
             } else if let id = selection.agentId, let agent = store.snapshot?.agent(id) {
                 AgentDetail(store: store, selection: selection, agent: agent)
             } else {
@@ -129,6 +138,17 @@ struct AgentDetail: View {
                     Text("Not working on anything right now.").font(.system(size: 12)).foregroundStyle(.secondary)
                 } else {
                     ForEach(agent.live) { live in LiveTurn(store: store, live: live, tint: Color(hex: agent.color)) }
+                }
+                let plans = store.snapshot?.openPlans(of: agent.id) ?? []
+                if !plans.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Plans").font(.system(size: 13, weight: .semibold))
+                            Spacer()
+                            Button(String(localized: "All plans")) { selection.agentId = LiveSelection.plans }.buttonStyle(.link).font(.system(size: 11))
+                        }
+                        ForEach(plans) { plan in PlanCard(store: store, plans: selection.plans, plan: plan, showAgent: false) }
+                    }
                 }
                 ThreadList(store: store, selection: selection, agent: agent)
             }

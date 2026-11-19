@@ -41,6 +41,51 @@ import Testing
     }
 }
 
+@Suite struct PlanTests {
+    func fixture() throws -> Snapshot {
+        let url = try #require(Bundle.module.url(forResource: "snapshot", withExtension: "json", subdirectory: "Fixtures"))
+        return try JSONDecoder().decode(Snapshot.self, from: Data(contentsOf: url))
+    }
+
+    @Test func decodesOpenPlansAndHistory() throws {
+        let plans = try #require(try fixture().plans)
+        #expect(plans.open.map(\.id) == ["pl-1", "pl-2"], "a plan with an unknown status is skipped, not fatal")
+        let running = plans.open[0]
+        #expect(running.isOpen && running.status == .active)
+        #expect(running.current?.text == "macOS")
+        #expect(running.progress == 1.0 / 3.0)
+        #expect(running.reasoned(running.items[0])?.count == 12)
+        #expect(running.reasoned(running.items[1]) == nil)
+        #expect(running.link == "https://discord.com/channels/1/157")
+        #expect([running.state(of: 0), running.state(of: 1), running.state(of: 2)] == [.done, .current, .pending])
+        let blocked = plans.open[1]
+        #expect(blocked.status == .blocked && blocked.blockedReason == "Phil")
+        #expect(blocked.state(of: 0) == .blocked)
+        #expect(plans.history.map(\.status) == [.completed, .closed])
+        #expect(plans.history[1].state(of: 1) == .dropped, "what a closed plan left undone")
+        #expect(plans.history[0].current == nil)
+        #expect(plans.next == "2026-11-18T19:00:00.000Z|pl-4")
+        #expect(try fixture().openPlans(of: "ag_a").map(\.id) == ["pl-1"])
+    }
+
+    @Test func olderServersHaveNoPlans() throws {
+        let json = #"{"version":1,"space":{"name":"s","origin":"https://s"},"user":{"id":"u","name":"U","email":"","role":"owner"},"accounts":[],"agents":[]}"#
+        let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(json.utf8))
+        #expect(snapshot.plans == nil)
+        #expect(snapshot.openPlans(of: "ag_a").isEmpty)
+    }
+
+    @Test func decodesPagesReasoningAndPlanEvents() throws {
+        let page = try JSONDecoder().decode(PlanPage.self, from: Data(#"{"status":"history","plans":[{"id":"p","agentId":"a","name":"N","status":"completed","items":[{"id":"x","text":"X"}],"done":1}],"next":null}"#.utf8))
+        #expect(page.plans.count == 1 && page.next == nil)
+        let reasoning = try JSONDecoder().decode(PlanTaskReasoning.self, from: Data(#"{"plan":{"id":"p"},"task":{"id":"x","text":"X"},"events":[{"seq":9,"traceId":"tr_1","step":{"type":"thinking","text":"Why","at":1795000000000},"startedAt":1795000000000}],"next":null}"#.utf8))
+        #expect(reasoning.events.first?.step.kind == .thinking)
+        #expect(reasoning.events.first?.step.text == "Why")
+        let event = try #require(ServerEvent.decode(#"{"type":"plan","agentId":"ag_a","channelId":"157","planId":"pl-1","status":"completed","done":3,"total":3}"#))
+        #expect(event.type == "plan" && event.planId == "pl-1" && event.status == "completed")
+    }
+}
+
 @Suite struct EventTests {
     @Test func parsesServerSentEvents() {
         var parser = EventParser()

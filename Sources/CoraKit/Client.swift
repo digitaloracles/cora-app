@@ -69,6 +69,19 @@ public struct CoraClient: Sendable {
         return try await get("/app/v1/threads/\(escaped)", as: ThreadDetail.self)
     }
 
+    /// Plans across every thread: `open` ones, or the `history` of finished ones newest first, older pages with `before`.
+    public func plans(history: Bool, before: String? = nil, limit: Int = 50) async throws -> PlanPage {
+        var path = "/app/v1/plans?status=\(history ? "history" : "open")&limit=\(limit)"
+        if let before, let escaped = before.addingPercentEncoding(withAllowedCharacters: .alphanumerics) { path += "&before=\(escaped)" }
+        return try await get(path, as: PlanPage.self)
+    }
+
+    /// The reasoning an agent linked to one checklist item.
+    public func planTask(_ plan: Plan, item: String) async throws -> PlanTaskReasoning {
+        let escaped = plan.channelId.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_.:"))) ?? plan.channelId
+        return try await get("/app/v1/threads/\(escaped)/plans/\(plan.id)/tasks/\(item)", as: PlanTaskReasoning.self)
+    }
+
     public func signOut() async throws {
         let (data, response) = try await session.data(for: request("/app/v1/session", method: "DELETE"))
         try Self.check(data, response)
@@ -147,6 +160,11 @@ public struct ServerEvent: Decodable, Sendable {
     public var channelId: String
     public var step: Step?
     public var trace: TraceSummary?
+    /// On `plan` events: which plan changed and its new status.
+    public var planId: String
+    public var status: String
+    public var done: Int
+    public var total: Int
 
     public struct TraceSummary: Decodable, Sendable, Hashable {
         public var id: String
@@ -166,13 +184,14 @@ public struct ServerEvent: Decodable, Sendable {
         }
     }
 
-    enum CodingKeys: String, CodingKey { case type, event, traceId, agentId, channelId, step, trace }
+    enum CodingKeys: String, CodingKey { case type, event, traceId, agentId, channelId, step, trace, planId, status, done, total }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         type = c.text(.type); event = c.text(.event); traceId = c.text(.traceId); agentId = c.text(.agentId); channelId = c.text(.channelId)
         step = try? c.decodeIfPresent(Step.self, forKey: .step)
         trace = try? c.decodeIfPresent(TraceSummary.self, forKey: .trace)
+        planId = c.text(.planId); status = c.text(.status); done = c.number(.done); total = c.number(.total)
     }
 
     public static func decode(_ text: String) -> ServerEvent? { try? JSONDecoder().decode(ServerEvent.self, from: Data(text.utf8)) }
