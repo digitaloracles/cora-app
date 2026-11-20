@@ -88,6 +88,8 @@ jobs:
           burst threads SIMCTL_CHILD_CORA_DEMO_TAB=threads
           burst thread SIMCTL_CHILD_CORA_DEMO_TAB=threads SIMCTL_CHILD_CORA_DEMO_THREAD=1000000000000000001
           burst plans SIMCTL_CHILD_CORA_DEMO_TAB=plans
+          burst plans-change SIMCTL_CHILD_CORA_DEMO_TAB=plans SIMCTL_CHILD_CORA_DEMO_CHANGE=1
+          burst agents-change SIMCTL_CHILD_CORA_DEMO_TAB=agents SIMCTL_CHILD_CORA_DEMO_CHANGE=1
           ls build/screenshots/bursts | wc -l
       - uses: actions/upload-artifact@v4
         if: always()

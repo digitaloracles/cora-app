@@ -63,6 +63,33 @@ final class SpaceStore: ObservableObject, Identifiable {
         demo = true
     }
 
+    /// `CORA_DEMO_CHANGE=1`: two seconds in, Ada's blocked plan starts again with Ada at work, as the snapshot brings it,
+    /// so the screenshots can check that rows change once and then stay still.
+    private func demoChange() {
+        guard ProcessInfo.processInfo.environment["CORA_DEMO_CHANGE"] == "1" else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, var next = self.snapshot else { return }
+            if var board = next.plans, let at = board.open.firstIndex(where: { $0.id == "plan_ada" }) {
+                board.open[at].status = .active
+                board.open[at].blockedReason = ""
+                board.open[at].updatedAt = Date()
+                next.plans = board
+                let plan = board.open[at]
+                if let agent = next.agents.firstIndex(where: { $0.id == plan.agentId }), let model = next.agents.first(where: { $0.id == "ag_buzz" })?.live.first {
+                    var live = model
+                    live.traceId = "tr_ada"
+                    live.channelId = plan.channelId
+                    live.threadName = plan.threadName
+                    live.startedAt = Date()
+                    next.agents[agent].live = [live]
+                    next.agents[agent].state = .working
+                }
+            }
+            self.snapshot = next
+        }
+    }
+
     init(connection: Connection, token: String) {
         self.connection = connection
         self.id = connection.server
@@ -73,7 +100,7 @@ final class SpaceStore: ObservableObject, Identifiable {
 
     /// Starts reading: a snapshot now and every minute, and the live stream while the app is in front.
     func start() {
-        if demo { return }
+        if demo { demoChange(); return }
         if client == nil {
             guard let token = Storage.token(for: connection) else {
                 phase = .failed(String(localized: "The access of this iPhone is missing: connect the space again."))
