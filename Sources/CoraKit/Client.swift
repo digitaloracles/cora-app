@@ -23,7 +23,7 @@ public struct Paired: Decodable, Sendable {
     public struct Device: Decodable, Sendable { public var id: String; public var name: String }
 }
 
-/// Reads one Cora space with a device token. Every call is read-only except signing this device out.
+/// Reads one Cora space with a device token. Every call is read-only except signing this device out, its push token and answering an agent's question.
 public struct CoraClient: Sendable {
     public let server: URL
     let token: String
@@ -80,6 +80,16 @@ public struct CoraClient: Sendable {
     public func planTask(_ plan: Plan, item: String) async throws -> PlanTaskReasoning {
         let escaped = plan.channelId.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_.:"))) ?? plan.channelId
         return try await get("/app/v1/threads/\(escaped)/plans/\(plan.id)/tasks/\(item)", as: PlanTaskReasoning.self)
+    }
+
+    /// Presses one of the answers an agent offered: it reaches the agent as the owner's word, and the chat shows it in place of the buttons.
+    public func answer(_ request: ChoiceRequest, index: Int) async throws -> ChoiceAnswer {
+        var request = self.request("/app/v1/choices/\(request.id)", method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["index": index])
+        let (data, response) = try await session.data(for: request)
+        try Self.check(data, response)
+        return try JSONDecoder().decode(ChoiceAnswer.self, from: data)
     }
 
     public func signOut() async throws {
@@ -174,6 +184,8 @@ public struct ServerEvent: Decodable, Sendable {
     public var status: String
     public var done: Int
     public var total: Int
+    /// On `choice` events: the question asked or answered (`status` open or answered).
+    public var choiceId: String
 
     public struct TraceSummary: Decodable, Sendable, Hashable {
         public var id: String
@@ -193,7 +205,7 @@ public struct ServerEvent: Decodable, Sendable {
         }
     }
 
-    enum CodingKeys: String, CodingKey { case type, event, traceId, agentId, channelId, step, trace, planId, status, done, total }
+    enum CodingKeys: String, CodingKey { case type, event, traceId, agentId, channelId, step, trace, planId, status, done, total, choiceId = "id" }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -201,6 +213,7 @@ public struct ServerEvent: Decodable, Sendable {
         step = try? c.decodeIfPresent(Step.self, forKey: .step)
         trace = try? c.decodeIfPresent(TraceSummary.self, forKey: .trace)
         planId = c.text(.planId); status = c.text(.status); done = c.number(.done); total = c.number(.total)
+        choiceId = c.text(.choiceId)
     }
 
     public static func decode(_ text: String) -> ServerEvent? { try? JSONDecoder().decode(ServerEvent.self, from: Data(text.utf8)) }

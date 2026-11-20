@@ -73,6 +73,7 @@ struct SpaceTabs: View {
         TabView(selection: $tab) {
             NavigationStack(path: $agentPath) { AgentsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Agents", systemImage: "person.2") }.tag(Tab.agents)
+                .badge(store.snapshot?.requests.count ?? 0)
             NavigationStack { SubscriptionsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Subscriptions", systemImage: "gauge.with.dots.needle.33percent") }.tag(Tab.subscriptions)
             NavigationStack(path: $threadPath) { ThreadsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }

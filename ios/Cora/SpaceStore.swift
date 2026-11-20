@@ -30,6 +30,12 @@ final class SpaceStore: ObservableObject, Identifiable {
     /// The reasoning linked to checklist items, by `planId/itemId`, read when an item is opened.
     @Published private(set) var planReasoning: [String: [Step]] = [:]
 
+    /// Questions this device is answering now, so a second press waits for the first.
+    @Published private(set) var answering: Set<String> = []
+    /// The last answer sent from here, shown for a moment where the question was; and why the last press failed.
+    @Published private(set) var lastAnswer: (agentName: String, answer: String)?
+    @Published var choiceError: String?
+
     private(set) var client: CoraClient?
     private var streamTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
@@ -127,6 +133,33 @@ final class SpaceStore: ObservableObject, Identifiable {
         phase = .failed(message.isEmpty ? String(localized: "This iPhone was disconnected from the space. Connect it again from the panel.") : message)
     }
 
+    /// Presses one of the answers an agent offered: the agent hears it as the owner's word, and the question leaves the list.
+    func answer(_ request: ChoiceRequest, index: Int) async {
+        guard request.choices.indices.contains(index), !answering.contains(request.id) else { return }
+        if demo {
+            snapshot?.requests.removeAll { $0.id == request.id }
+            lastAnswer = (request.agentName, request.choices[index])
+            return
+        }
+        guard let client else { return }
+        answering.insert(request.id)
+        choiceError = nil
+        defer { answering.remove(request.id) }
+        do {
+            let sent = try await client.answer(request, index: index)
+            snapshot?.requests.removeAll { $0.id == request.id }
+            lastAnswer = (request.agentName, sent.answer)
+            let shown = sent.answer
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                if self?.lastAnswer?.answer == shown { self?.lastAnswer = nil }
+            }
+        } catch {
+            choiceError = error.localizedDescription
+        }
+        scheduleRefresh()
+    }
+
     private func scheduleRefresh() {
         pendingRefresh?.cancel()
         pendingRefresh = Task { [weak self] in
@@ -172,7 +205,7 @@ final class SpaceStore: ObservableObject, Identifiable {
                 if event.event == "end", let id = event.trace?.id { traces[id] = nil }
                 scheduleRefresh()
             }
-        case "subscription-usage", "agents", "agent-owners": scheduleRefresh()
+        case "subscription-usage", "agents", "agent-owners", "choice": scheduleRefresh()
         case "plan":
             if !event.planId.isEmpty { planReasoning = planReasoning.filter { !$0.key.hasPrefix(event.planId + "/") } }
             scheduleRefresh()

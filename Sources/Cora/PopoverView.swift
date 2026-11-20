@@ -37,6 +37,9 @@ struct PopoverView: View {
             }
             Divider()
             if let snapshot = store.snapshot {
+                if !snapshot.requests.isEmpty || store.lastAnswer != nil || store.choiceError != nil {
+                    questions(snapshot).padding(.horizontal, 10).padding(.top, 10)
+                }
                 Picker("", selection: $tab) {
                     ForEach(PopoverTab.allCases) { Text($0.title).tag($0) }
                 }
@@ -118,6 +121,18 @@ struct PopoverView: View {
     }
 
     static let recentPlans = 5
+    static let shownQuestions = 2
+
+    /// Above the tabs, whatever tab is open: an agent waiting for an answer comes first. Past two, the window has the rest.
+    @ViewBuilder func questions(_ snapshot: Snapshot) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ChoiceList(store: store, requests: Array(snapshot.requests.prefix(Self.shownQuestions)), compact: true)
+            if snapshot.requests.count > Self.shownQuestions {
+                Button(String(format: String(localized: "All questions (%d)"), snapshot.requests.count)) { openAgent(LiveSelection.questions) }
+                    .buttonStyle(.link).font(.system(size: 11)).padding(.horizontal, 2)
+            }
+        }
+    }
 
     func empty(_ text: LocalizedStringKey) -> some View {
         Text(text).font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)

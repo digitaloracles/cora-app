@@ -110,8 +110,17 @@ enum Samples {
             Agent(id: "ag_nico", name: "Nico", color: "#e05aa5", model: "codex/gpt-6", state: .idle, accountIds: ["sub_codex"], usage: usage(18_000)),
             Agent(id: "ag_radix", name: "Radix", color: "#3fbf8f", enabled: false, model: "hermes/kimi-k3", state: .off, accountIds: ["sub_kimi"], usage: usage(4_000)),
         ]
-        return Snapshot(space: .init(name: "acme", origin: "https://acme.usecora.space"), user: .init(id: "u_alex", name: "Alex", email: "alex@example.com", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama, deepseek], agents: agents, plans: plans)
+        return Snapshot(space: .init(name: "acme", origin: "https://acme.usecora.space"), user: .init(id: "u_alex", name: "Alex", email: "alex@example.com", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama, deepseek], agents: agents, plans: plans,
+                        requests: ProcessInfo.processInfo.environment["CORA_DEMO_QUESTIONS"] == "1" ? requests : [])
     }()
+
+    /// Agents waiting for an answer, for the Questions screenshots.
+    static let requests: [ChoiceRequest] = [
+        ChoiceRequest(id: "ch_0a1b2c3d4e5f", agentId: "ag_buzz", agentName: "Buzz", color: "#f2a93b", channelId: "1000000000000000001", threadName: "Quarterly report",
+                      link: "https://discord.com/channels/1/2", question: "The report is checked against the invoices. Shall I send it to the client now or wait for your review?", choices: ["Send it now", "Wait for my review", "Don't send"], askedAt: now.addingTimeInterval(-240)),
+        ChoiceRequest(id: "ch_6f5e4d3c2b1a", agentId: "ag_ada", agentName: "Ada", color: "#4f9cf7", channelId: "1000000000000000002", threadName: "Website launch",
+                      question: "Every page passed on staging. Publish the site?", choices: ["Yes", "No"], askedAt: now.addingTimeInterval(-1500)),
+    ]
 
 
     /// A thread's turns for the screenshots: the running one (shown live from the snapshot) and an earlier finished one.

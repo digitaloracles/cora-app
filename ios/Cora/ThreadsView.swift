@@ -88,6 +88,7 @@ struct ThreadDetailView: View {
             if let url = URL(string: thread.link), !thread.link.isEmpty {
                 Link(destination: url) { Label("Open the thread", systemImage: "arrow.up.right.square") }
             }
+            ChoiceSection(store: store, requests: (store.snapshot?.requests ?? []).filter { $0.channelId == thread.id }, showThread: false)
             ForEach(runs) { run in
                 Section {
                     LiveTurnView(store: store, live: run.live)

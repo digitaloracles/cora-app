@@ -13,6 +13,7 @@ final class LiveSelection: ObservableObject {
     /// The sidebar entries of the Tokens and Plans pages, beside the agents' ids.
     static let tokens = "#tokens"
     static let plans = "#plans"
+    static let questions = "#questions"
 }
 
 /// The live window: agents on the left; on the right what the selected one is doing now, its threads and its usage.
@@ -33,6 +34,9 @@ struct LiveWindow: View {
                 }
                 Label("Tokens", systemImage: "gauge.with.dots.needle.33percent").font(.system(size: 13, weight: .medium))
                     .tag(LiveSelection.tokens)
+                Label("Questions", systemImage: "questionmark.bubble").font(.system(size: 13, weight: .medium))
+                    .badge(store.snapshot?.requests.count ?? 0)
+                    .tag(LiveSelection.questions)
                 Label("Plans", systemImage: "checklist").font(.system(size: 13, weight: .medium))
                     .badge(store.snapshot?.plans?.open.count ?? 0)
                     .tag(LiveSelection.plans)
@@ -53,6 +57,8 @@ struct LiveWindow: View {
         } detail: {
             if selection.agentId == LiveSelection.tokens, let snapshot = store.snapshot {
                 TokensPage(store: store, selection: selection, snapshot: snapshot)
+            } else if selection.agentId == LiveSelection.questions, let snapshot = store.snapshot {
+                QuestionsPage(store: store, snapshot: snapshot)
             } else if selection.agentId == LiveSelection.plans, let snapshot = store.snapshot {
                 PlansPage(store: store, plans: selection.plans, snapshot: snapshot)
             } else if let id = selection.agentId, let agent = store.snapshot?.agent(id) {

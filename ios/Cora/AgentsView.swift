@@ -10,9 +10,12 @@ struct AgentsView: View {
         Loaded(store: store) { snapshot in
             List {
                 let list = Self.sorted(snapshot.agents.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) })
-                if snapshot.agents.isEmpty { Placeholder(text: String(localized: "No agents in this space for your account.")) }
-                ForEach(list) { agent in
-                    NavigationLink(value: agent.id) { AgentRow(store: store, agent: agent) }
+                ChoiceSection(store: store, requests: query.isEmpty ? snapshot.requests : [])
+                Section {
+                    if snapshot.agents.isEmpty { Placeholder(text: String(localized: "No agents in this space for your account.")) }
+                    ForEach(list) { agent in
+                        NavigationLink(value: agent.id) { AgentRow(store: store, agent: agent) }
+                    }
                 }
             }
             .listStyle(.insetGrouped)

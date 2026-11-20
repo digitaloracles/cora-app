@@ -92,3 +92,6 @@
 "%lld of %lld steps" = "%1$lld di %2$lld passi";
 "%@ is working" = "%@ sta lavorando";
 "%@ are working" = "%@ stanno lavorando";
+"Questions" = "Domande";
+"%@ asks you" = "%@ ti chiede";
+"Sent to %@: %@" = "Inviato a %1$@: %2$@";
