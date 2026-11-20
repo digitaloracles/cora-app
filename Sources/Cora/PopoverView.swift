@@ -2,7 +2,7 @@ import CoraKit
 import SwiftUI
 
 enum PopoverTab: String, CaseIterable, Identifiable {
-    case agents, tokens, subscriptions, threads
+    case agents, tokens, subscriptions, threads, plans
     var id: String { rawValue }
     var title: LocalizedStringKey {
         switch self {
@@ -10,13 +10,14 @@ enum PopoverTab: String, CaseIterable, Identifiable {
         case .tokens: return "Tokens"
         case .subscriptions: return "Subscriptions"
         case .threads: return "Threads"
+        case .plans: return "Plans"
         }
     }
 }
 
-/// The menu bar popover: the space, then four tabs. Agents with what they do now; Tokens with each agent's tokens in
+/// The menu bar popover: the space, then five tabs. Agents with what they do now; Tokens with each agent's tokens in
 /// the last 7 days; Subscriptions with one line per subscription (each one can be pinned to the menu bar); Threads with
-/// the latest reasoning of each thread. The popover is as tall as the tab's content and scrolls only past the screen.
+/// the latest reasoning of each thread; Plans with every plan in progress and its checklist, then the latest finished. The popover is as tall as the tab's content and scrolls only past the screen.
 struct PopoverView: View {
     @ObservedObject var store: SpaceStore
     /// The other spaces of this Mac: the switcher under the header, and "Add another space" in the menu.
@@ -25,6 +26,7 @@ struct PopoverView: View {
     @State var tab: PopoverTab = .agents
     @State var threadQuery = ""
     @State var agentQuery = ""
+    @StateObject private var planSelection = PlanSelection()
     @Environment(\.isStaticPreview) private var isStaticPreview
 
     var body: some View {
@@ -49,6 +51,7 @@ struct PopoverView: View {
                         case .tokens: tokens(snapshot)
                         case .subscriptions: subscriptions(snapshot)
                         case .threads: threads(snapshot)
+                        case .plans: plans(snapshot)
                         }
                     }
                     .padding(10)
@@ -89,6 +92,32 @@ struct PopoverView: View {
             Button { openAgent(entry.agents.first?.id) } label: { ThreadRow(entry: entry, avatarURL: { store.avatarURL($0) }) }.buttonStyle(.plain)
         }
     }
+
+    /// Plans in progress whole, with their checklist; the latest finished ones in a line each. The live window has them all.
+    @ViewBuilder func plans(_ snapshot: Snapshot) -> some View {
+        if let list = snapshot.plans {
+            let finished = Array(store.planHistory.prefix(Self.recentPlans))
+            if list.open.isEmpty { empty("No plan in progress.") }
+            ForEach(list.open) { plan in PlanCard(store: store, plans: planSelection, plan: plan, compact: true) }
+            if !finished.isEmpty {
+                section("Finished") {
+                    VStack(spacing: 0) {
+                        ForEach(Array(finished.enumerated()), id: \.element.id) { index, plan in
+                            if index > 0 { Divider().padding(.leading, 38) }
+                            PlanHistoryRow(store: store, plans: planSelection, plan: plan, compact: true)
+                        }
+                    }
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
+                }
+            }
+            Button(String(localized: "All plans")) { openAgent(LiveSelection.plans) }
+                .buttonStyle(.link).font(.system(size: 11)).padding(.horizontal, 2)
+        } else {
+            empty("This space does not list plans yet: its Cora server needs an update.")
+        }
+    }
+
+    static let recentPlans = 5
 
     func empty(_ text: LocalizedStringKey) -> some View {
         Text(text).font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 2)
@@ -131,7 +160,7 @@ struct PopoverView: View {
             if store.snapshot != nil {
                 Circle().fill(store.streamOnline || isStaticPreview ? Color.green : Color.orange).frame(width: 6, height: 6)
                     .help(store.streamOnline ? String(localized: "Live") : String(localized: "Reconnecting to the live stream…"))
-                Button { openAgent(tab == .tokens ? LiveSelection.tokens : nil) } label: { Image(systemName: "macwindow") }.buttonStyle(.borderless).help(String(localized: "Open the live window"))
+                Button { openAgent(tab == .tokens ? LiveSelection.tokens : tab == .plans ? LiveSelection.plans : nil) } label: { Image(systemName: "macwindow") }.buttonStyle(.borderless).help(String(localized: "Open the live window"))
                 Button { Task { await store.refresh() } } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.borderless).help(String(localized: "Refresh"))
             }
             Menu {
