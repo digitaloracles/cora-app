@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func showWindow(agent: String?) {
         let store = spaces.current
-        if let agent { selection.agentId = agent } else if selection.agentId == nil { selection.agentId = store.snapshot?.working.first?.id ?? store.snapshot?.agents.first?.id }
+        if let agent { selection.show(agent) } else if selection.agentId == nil { selection.agentId = store.snapshot?.working.first?.id ?? store.snapshot?.agents.first?.id }
         if window == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.title = store.snapshot?.space.name ?? "Cora"

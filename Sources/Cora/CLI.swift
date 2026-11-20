@@ -207,6 +207,12 @@ enum CLI {
                 try snapshot(PlansPage(store: store, plans: selection.plans, snapshot: store.snapshot!).environment(\.isStaticPreview, true), width: width, height: nil, appearance: appearance,
                              to: folder.appendingPathComponent("plans-page-\(Int(width))-\(name).png"))
             }
+            if let focus = store.snapshot?.plans?.open.last {
+                selection.show(LiveSelection.plan(focus.id))
+                try snapshot(PlansPage(store: store, plans: selection.plans, snapshot: store.snapshot!).environment(\.isStaticPreview, true), width: 900, height: nil, appearance: appearance,
+                             to: folder.appendingPathComponent("plans-page-focused-\(name).png"))
+                selection.plans.focused = nil
+            }
             let asking = SpaceStore(preview: Samples.asking)
             try snapshot(PopoverView(store: asking, tab: .agents).environment(\.isStaticPreview, true), width: 360, height: nil, appearance: appearance,
                          to: folder.appendingPathComponent("popover-questions-\(name).png"))

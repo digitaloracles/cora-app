@@ -6,6 +6,8 @@ final class PlanSelection: ObservableObject {
     @Published var openPlans: Set<String> = []
     @Published var openItems: Set<String> = []
     @Published var loadingItems: Set<String> = []
+    /// The plan the popover asked to show: the page scrolls to it and outlines it for a moment.
+    @Published var focused: String?
 }
 
 /// The window's Plans page: every plan in progress with its checklist, then the history of finished ones.
@@ -16,7 +18,22 @@ struct PlansPage: View {
     @Environment(\.isStaticPreview) private var isStaticPreview
 
     var body: some View {
-        if isStaticPreview { content } else { ScrollView { content } }
+        if isStaticPreview {
+            content
+        } else {
+            ScrollViewReader { reader in
+                ScrollView { content }
+                    .onAppear { reveal(reader) }
+                    .onChange(of: plans.focused) { _, _ in reveal(reader) }
+            }
+        }
+    }
+
+    func reveal(_ reader: ScrollViewProxy) {
+        guard let id = plans.focused else { return }
+        if !(snapshot.plans?.open.contains { $0.id == id } ?? false) { plans.openPlans.insert(id) }
+        DispatchQueue.main.async { withAnimation(.easeOut(duration: 0.25)) { reader.scrollTo(id, anchor: .top) } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { if plans.focused == id { withAnimation { plans.focused = nil } } }
     }
 
     var content: some View {
@@ -38,7 +55,7 @@ struct PlansPage: View {
                     if open.isEmpty {
                         Text("No plan in progress.").font(.system(size: 12)).foregroundStyle(.secondary)
                     }
-                    ForEach(open) { plan in PlanCard(store: store, plans: plans, plan: plan) }
+                    ForEach(open) { plan in PlanCard(store: store, plans: plans, plan: plan).id(plan.id) }
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     Text("History").font(.system(size: 13, weight: .semibold))
@@ -48,7 +65,7 @@ struct PlansPage: View {
                         VStack(spacing: 0) {
                             ForEach(Array(history.enumerated()), id: \.element.id) { index, plan in
                                 if index > 0 { Divider().padding(.leading, 38) }
-                                PlanHistoryRow(store: store, plans: plans, plan: plan)
+                                PlanHistoryRow(store: store, plans: plans, plan: plan).id(plan.id)
                             }
                         }
                         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
@@ -83,6 +100,8 @@ struct PlanCard: View {
     var showAgent = true
     /// In the menu bar popover: a smaller face and tighter spacing for its narrow width.
     var compact = false
+    /// In the menu bar popover the card is only its head: a click opens the window on the whole plan.
+    var open: (() -> Void)? = nil
 
     var body: some View {
         let tint = plan.status == .blocked ? Color.orange : PlanAgentFace.tint(plan, store.snapshot)
@@ -107,12 +126,17 @@ struct PlanCard: View {
                 Label(plan.blockedReason, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 11)).foregroundStyle(.orange).lineLimit(3)
             }
-            PlanChecklist(store: store, plans: plans, plan: plan)
+            if open == nil { PlanChecklist(store: store, plans: plans, plan: plan) }
         }
         .padding(compact ? 10 : 12)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint.opacity(0.35), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint.opacity(focused ? 1 : 0.35), lineWidth: focused ? 2 : 1))
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onTapGesture { open?() }
+        .help(open == nil ? "" : String(localized: "Open the plan in the window"))
     }
+
+    var focused: Bool { open == nil && plans.focused == plan.id }
 }
 
 /// A finished plan in one line; a click unfolds its checklist.
@@ -122,12 +146,14 @@ struct PlanHistoryRow: View {
     let plan: Plan
     /// In the menu bar popover the icon already says completed or closed, and the time is relative.
     var compact = false
+    /// In the menu bar popover a click opens the window on the plan instead of unfolding it here.
+    var openInWindow: (() -> Void)? = nil
 
     var body: some View {
         let open = plans.openPlans.contains(plan.id)
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                if open { plans.openPlans.remove(plan.id) } else { plans.openPlans.insert(plan.id) }
+                if let openInWindow { openInWindow() } else if open { plans.openPlans.remove(plan.id) } else { plans.openPlans.insert(plan.id) }
             } label: {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: plan.status == .completed ? "checkmark.seal.fill" : "xmark.circle")
@@ -142,13 +168,13 @@ struct PlanHistoryRow: View {
                         Text(compact ? Format.ago(at) : at.formatted(date: .abbreviated, time: .shortened)).font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
                     }
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(open ? 90 : 0))
+                        .rotationEffect(.degrees(open && openInWindow == nil ? 90 : 0))
                 }
                 .padding(.horizontal, 10).padding(.vertical, 9)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            if open {
+            if open && openInWindow == nil {
                 VStack(alignment: .leading, spacing: 8) {
                     PlanThreadLink(plan: plan, label: true)
                     PlanChecklist(store: store, plans: plans, plan: plan)

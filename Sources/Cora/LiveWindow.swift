@@ -14,6 +14,20 @@ final class LiveSelection: ObservableObject {
     static let tokens = "#tokens"
     static let plans = "#plans"
     static let questions = "#questions"
+
+    /// What the popover passes to open the Plans page on one plan.
+    static func plan(_ id: String) -> String { planPrefix + id }
+    static let planPrefix = "#plan:"
+
+    /// Shows the page an entry stands for: one plan opens the Plans page on it.
+    func show(_ entry: String) {
+        if entry.hasPrefix(Self.planPrefix) {
+            plans.focused = String(entry.dropFirst(Self.planPrefix.count))
+            agentId = Self.plans
+        } else {
+            agentId = entry
+        }
+    }
 }
 
 /// The live window: agents on the left; on the right what the selected one is doing now, its threads and its usage.
