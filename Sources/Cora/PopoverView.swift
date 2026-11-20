@@ -17,7 +17,7 @@ enum PopoverTab: String, CaseIterable, Identifiable {
 
 /// The menu bar popover: the space, then five tabs. Agents with what they do now; Tokens with each agent's tokens in
 /// the last 7 days; Subscriptions with one line per subscription (each one can be pinned to the menu bar); Threads with
-/// the latest reasoning of each thread; Plans with every plan in progress and its checklist, then the latest finished. The popover is as tall as the tab's content and scrolls only past the screen.
+/// the latest reasoning of each thread; Plans with the head of every plan in progress (finished ones are in the window). The popover is as tall as the tab's content and scrolls only past the screen.
 struct PopoverView: View {
     @ObservedObject var store: SpaceStore
     /// The other spaces of this Mac: the switcher under the header, and "Add another space" in the menu.
@@ -96,23 +96,11 @@ struct PopoverView: View {
         }
     }
 
-    /// Plans in progress by their head only, the latest finished ones in a line each: a click opens the window on the whole plan.
+    /// Plans in progress by their head only: a click opens the window on the whole plan. Finished plans live in the window.
     @ViewBuilder func plans(_ snapshot: Snapshot) -> some View {
         if let list = snapshot.plans {
-            let finished = Array(store.planHistory.prefix(Self.recentPlans))
             if list.open.isEmpty { empty("No plan in progress.") }
             ForEach(list.open) { plan in PlanCard(store: store, plans: planSelection, plan: plan, compact: true, open: { openAgent(LiveSelection.plan(plan.id)) }) }
-            if !finished.isEmpty {
-                section("Finished") {
-                    VStack(spacing: 0) {
-                        ForEach(Array(finished.enumerated()), id: \.element.id) { index, plan in
-                            if index > 0 { Divider().padding(.leading, 38) }
-                            PlanHistoryRow(store: store, plans: planSelection, plan: plan, compact: true, openInWindow: { openAgent(LiveSelection.plan(plan.id)) })
-                        }
-                    }
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
-                }
-            }
             Button(String(localized: "All plans")) { openAgent(LiveSelection.plans) }
                 .buttonStyle(.link).font(.system(size: 11)).padding(.horizontal, 2)
         } else {
@@ -120,7 +108,6 @@ struct PopoverView: View {
         }
     }
 
-    static let recentPlans = 5
     static let shownQuestions = 2
 
     /// Above the tabs, whatever tab is open: an agent waiting for an answer comes first. Past two, the window has the rest.
