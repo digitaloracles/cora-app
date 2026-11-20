@@ -68,6 +68,27 @@ jobs:
           sleep 6
           xcrun simctl io "$DEVICE" screenshot build/screenshots/0-connect.png
           ls -la build/screenshots
+      - name: Live rows stay still (bursts of frames while an agent works)
+        env:
+          SHOT_LANGUAGE: ${{ inputs.language || 'it' }}
+        run: |
+          DEVICE=$(xcrun simctl list devices booted -j | python3 -c 'import json,sys; print(next(d["udid"] for v in json.load(sys.stdin)["devices"].values() for d in v))')
+          mkdir -p build/screenshots/bursts
+          burst() {
+            name=$1; shift
+            xcrun simctl terminate "$DEVICE" space.usecora.ios 2>/dev/null || true
+            env SIMCTL_CHILD_CORA_DEMO=1 "$@" xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "($SHOT_LANGUAGE)" -AppleLocale "${SHOT_LANGUAGE}_$([ "$SHOT_LANGUAGE" = en ] && echo US || echo IT)"
+            sleep 5
+            for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+              xcrun simctl io "$DEVICE" screenshot "build/screenshots/bursts/$name-$i.png" >/dev/null 2>&1
+              sleep 0.15
+            done
+          }
+          burst agents SIMCTL_CHILD_CORA_DEMO_TAB=agents
+          burst threads SIMCTL_CHILD_CORA_DEMO_TAB=threads
+          burst thread SIMCTL_CHILD_CORA_DEMO_TAB=threads SIMCTL_CHILD_CORA_DEMO_THREAD=1000000000000000001
+          burst plans SIMCTL_CHILD_CORA_DEMO_TAB=plans
+          ls build/screenshots/bursts | wc -l
       - uses: actions/upload-artifact@v4
         if: always()
         with:
