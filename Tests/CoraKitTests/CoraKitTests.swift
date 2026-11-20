@@ -76,7 +76,7 @@ import Testing
     }
 
     @Test func decodesQuestionsWithChoices() throws {
-        let json = #"{"version":1,"space":{"name":"s","origin":"https://s"},"user":{"id":"u","name":"U","email":"","role":"owner"},"accounts":[],"agents":[],"requests":[{"id":"ch_0a1b2c3d4e5f","agentId":"ag_a","agentName":"Olga","color":"#4f9cf7","channelId":"123","threadName":"Launch","link":"https://discord.com/channels/1/123","question":"Publish now?","choices":["Publish","Later"],"askedAt":"2026-11-20T07:30:00.000Z"},{"agentId":"no-id"}]}"#
+        let json = ##"{"version":1,"space":{"name":"s","origin":"https://s"},"user":{"id":"u","name":"U","email":"","role":"owner"},"accounts":[],"agents":[],"requests":[{"id":"ch_0a1b2c3d4e5f","agentId":"ag_a","agentName":"Olga","color":"#4f9cf7","channelId":"123","threadName":"Launch","link":"https://discord.com/channels/1/123","question":"Publish now?","choices":["Publish","Later"],"askedAt":"2026-11-20T07:30:00.000Z"},{"agentId":"no-id"}]}"##
         let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(json.utf8))
         #expect(snapshot.requests.map(\.id) == ["ch_0a1b2c3d4e5f"], "a question without an id is skipped, not fatal")
         let request = try #require(snapshot.requests.first)
