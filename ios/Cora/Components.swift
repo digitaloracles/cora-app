@@ -108,19 +108,29 @@ struct StateBadge: View {
 }
 
 /// A state dot; while an agent works it pulses, so a running turn shows at a glance.
+/// The pulse is computed from the clock, not started as a repeating animation: a `repeatForever` transaction
+/// also catches the layout of the row it appears in, and the text beside the dot kept coming apart and starting over.
 struct LiveDot: View {
     var color: Color = .green
     var size: CGFloat = 6
     var pulsing = true
-    @State private var dim = false
 
     var body: some View {
-        Circle().fill(color).frame(width: size, height: size)
-            .opacity(pulsing && dim ? 0.3 : 1)
-            .onAppear { if pulsing { withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { dim = true } } }
-            .onChange(of: pulsing) { _, on in
-                if on { withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { dim = true } } else { withAnimation(.default) { dim = false } }
+        if pulsing {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                dot.opacity(Self.opacity(at: context.date))
             }
+        } else {
+            dot
+        }
+    }
+
+    private var dot: some View { Circle().fill(color).frame(width: size, height: size) }
+
+    /// Between 1 and 0.3 and back every 1.6 s, eased like the old animation.
+    static func opacity(at date: Date) -> Double {
+        let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
+        return 0.65 + 0.35 * cos(2 * .pi * phase)
     }
 }
 
