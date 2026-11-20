@@ -96,18 +96,18 @@ struct PopoverView: View {
         }
     }
 
-    /// Plans in progress whole, with their checklist; the latest finished ones in a line each. The live window has them all.
+    /// Plans in progress by their head only, the latest finished ones in a line each: a click opens the window on the whole plan.
     @ViewBuilder func plans(_ snapshot: Snapshot) -> some View {
         if let list = snapshot.plans {
             let finished = Array(store.planHistory.prefix(Self.recentPlans))
             if list.open.isEmpty { empty("No plan in progress.") }
-            ForEach(list.open) { plan in PlanCard(store: store, plans: planSelection, plan: plan, compact: true) }
+            ForEach(list.open) { plan in PlanCard(store: store, plans: planSelection, plan: plan, compact: true, open: { openAgent(LiveSelection.plan(plan.id)) }) }
             if !finished.isEmpty {
                 section("Finished") {
                     VStack(spacing: 0) {
                         ForEach(Array(finished.enumerated()), id: \.element.id) { index, plan in
                             if index > 0 { Divider().padding(.leading, 38) }
-                            PlanHistoryRow(store: store, plans: planSelection, plan: plan, compact: true)
+                            PlanHistoryRow(store: store, plans: planSelection, plan: plan, compact: true, openInWindow: { openAgent(LiveSelection.plan(plan.id)) })
                         }
                     }
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
