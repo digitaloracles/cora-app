@@ -3,16 +3,29 @@ import SwiftUI
 
 @main
 struct CoraApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var spaces = Spaces()
+    @StateObject private var notices = Notices.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             RootView(spaces: spaces)
                 .onOpenURL { spaces.handle($0) }
+                .onChange(of: notices.token) { _, token in if let token { spaces.registerPush(token, environment: notices.environment) } }
+                .onChange(of: spaces.stores.count) { _, count in
+                    guard count > 0 && !Spaces.demo else { return }
+                    notices.ask()
+                    if let token = notices.token { spaces.registerPush(token, environment: notices.environment) }
+                }
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
-                    case .active: spaces.startAll()
+                    case .active:
+                        spaces.startAll()
+                        if !spaces.stores.isEmpty && !Spaces.demo {
+                            notices.ask()
+                            if let token = notices.token { spaces.registerPush(token, environment: notices.environment) }
+                        }
                     case .background: spaces.pauseAll()
                     default: break
                     }
@@ -53,15 +66,17 @@ struct SpaceTabs: View {
     @ObservedObject var store: SpaceStore
     @Binding var tab: Tab
     @State private var agentPath: [String] = ProcessInfo.processInfo.environment["CORA_DEMO_AGENT"].map { [$0] } ?? []
+    @State private var threadPath: [ThreadRoute] = ProcessInfo.processInfo.environment["CORA_DEMO_THREAD"].map { [ThreadRoute(id: $0)] } ?? []
     @State private var planPath: [PlanRoute] = ProcessInfo.processInfo.environment["CORA_DEMO_PLAN"].map { [PlanRoute(id: $0)] } ?? []
 
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack(path: $agentPath) { AgentsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Agents", systemImage: "person.2") }.tag(Tab.agents)
+                .badge(store.snapshot?.requests.count ?? 0)
             NavigationStack { SubscriptionsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Subscriptions", systemImage: "gauge.with.dots.needle.33percent") }.tag(Tab.subscriptions)
-            NavigationStack { ThreadsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
+            NavigationStack(path: $threadPath) { ThreadsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Threads", systemImage: "text.bubble") }.tag(Tab.threads)
             NavigationStack(path: $planPath) { PlansView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
                 .tabItem { Label("Plans", systemImage: "checklist") }.tag(Tab.plans)
@@ -70,6 +85,14 @@ struct SpaceTabs: View {
                 .tabItem { Label("Spaces", systemImage: "square.stack") }.tag(Tab.spaces)
         }
         .onChange(of: store.revoked) { _, revoked in if revoked { spaces.forget(store) } }
+        .onReceive(Notices.shared.$target) { target in
+            guard let target else { return }
+            switch target {
+            case .plan(let id): tab = .plans; planPath = [PlanRoute(id: id)]
+            case .thread(let id): tab = .threads; threadPath = [ThreadRoute(id: id)]
+            }
+            Notices.shared.target = nil
+        }
     }
 }
 

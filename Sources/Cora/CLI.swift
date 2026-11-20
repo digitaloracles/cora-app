@@ -5,7 +5,7 @@ import SwiftUI
 /// The app from the command line: connect, read, watch the live stream, render its views. Used by CI and for checks.
 enum CLI {
     enum Command {
-        case connect(String), print(String?), spaces, watch(TimeInterval), disconnect(String?), renderPreview(String), renderLive(String), version
+        case connect(String), print(String?), spaces, watch(TimeInterval), disconnect(String?), renderPreview(String), renderLive(String), version, answer(String, Int)
     }
 
     static func command(_ arguments: [String]) -> Command? {
@@ -20,6 +20,9 @@ enum CLI {
         case "--render-preview": return value.map(Command.renderPreview)
         case "--render-live": return value.map(Command.renderLive)
         case "--version": return .version
+        case "--answer":
+            guard let id = value, let index = arguments.dropFirst(2).first.flatMap({ Int($0) }) else { return nil }
+            return .answer(id, index)
         default: return nil
         }
     }
@@ -39,6 +42,11 @@ enum CLI {
                 Swift.print("Connected to \(connection.host) as \(paired.user.name) <\(paired.user.email)>, device \(paired.device.id)")
             case .spaces:
                 for connection in Storage.loadConnections() { Swift.print("\(connection.server.absoluteString) \(connection.spaceName) as \(connection.userName)") }
+            case .answer(let id, let index):
+                let (client, _) = try connected()
+                guard let request = try await client.snapshot().requests.first(where: { $0.id == id }) else { throw ClientError.http(404, "No open question \(id).") }
+                let sent = try await client.answer(request, index: index)
+                Swift.print("Answered \(request.agentName): \(sent.answer)")
             case .print(let space):
                 let (client, _) = try connected(space)
                 Swift.print(describe(try await client.snapshot()), terminator: "")
@@ -55,6 +63,7 @@ enum CLI {
                             guard let step = event.step else { continue }
                             Swift.print("step \(names[event.agentId] ?? "?") \(event.traceId) [\(step.kind.rawValue)] \(step.headline.replacingOccurrences(of: "\n", with: " ").prefix(200))")
                         case ("trace", "end"): Swift.print("end \(names[event.trace?.agentId ?? ""] ?? "?") \(event.trace?.id ?? "") \(event.trace?.status ?? "")")
+                        case ("choice", _): Swift.print("choice \(names[event.agentId] ?? "?") \(event.choiceId) \(event.status)")
                         case ("plan", _): Swift.print("plan \(names[event.agentId] ?? "?") \(event.planId) \(event.status) \(event.done)/\(event.total)")
                         case ("access-revoked", _): Swift.print("live: access revoked"); return
                         default: Swift.print("event \(event.type)")
@@ -137,6 +146,13 @@ enum CLI {
                 if plan.status == .blocked, !plan.blockedReason.isEmpty { out += "    blocked: \(plan.blockedReason)\n" }
             }
         }
+        if !snapshot.requests.isEmpty {
+            out += "Questions: \(snapshot.requests.count)\n"
+            for request in snapshot.requests {
+                out += "- \(request.id) \(request.agentName) · \(request.threadName.isEmpty ? request.channelId : request.threadName): \(request.question.replacingOccurrences(of: "\n", with: " ").prefix(160))\n"
+                out += "    choices: \(request.choices.enumerated().map { "\($0.offset)=\($0.element)" }.joined(separator: " | "))\n"
+            }
+        }
         out += "Accounts: \(snapshot.accounts.count)\n"
         for account in snapshot.accounts {
             out += "- \(Providers.name(account.provider)) \(account.email.isEmpty ? account.label : account.email) \(account.plan) used by \(account.agentIds.compactMap { snapshot.agent($0)?.name }.joined(separator: ", "))\n"
@@ -191,6 +207,14 @@ enum CLI {
                 try snapshot(PlansPage(store: store, plans: selection.plans, snapshot: store.snapshot!).environment(\.isStaticPreview, true), width: width, height: nil, appearance: appearance,
                              to: folder.appendingPathComponent("plans-page-\(Int(width))-\(name).png"))
             }
+            let asking = SpaceStore(preview: Samples.asking)
+            try snapshot(PopoverView(store: asking, tab: .agents).environment(\.isStaticPreview, true), width: 360, height: nil, appearance: appearance,
+                         to: folder.appendingPathComponent("popover-questions-\(name).png"))
+            try live(PopoverView(store: asking, tab: .agents), appearance: appearance, to: folder.appendingPathComponent("popover-live-questions-\(name).png"), label: "popover questions \(name)")
+            selection.agentId = LiveSelection.questions
+            try snapshot(LiveWindow(store: asking, selection: selection), width: 1000, height: 700, appearance: appearance, to: folder.appendingPathComponent("window-questions-\(name).png"))
+            try snapshot(QuestionsPage(store: asking, snapshot: Samples.asking).environment(\.isStaticPreview, true), width: 460, height: nil, appearance: appearance,
+                         to: folder.appendingPathComponent("questions-page-460-\(name).png"))
             selection.agentId = agent
             var other = store.snapshot!
             other.space = .init(name: "Dopamina", origin: "https://dopamina.usecora.space")

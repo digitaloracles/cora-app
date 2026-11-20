@@ -125,3 +125,10 @@
 "Thread" = "Thread";
 "%lld of %lld steps" = "%1$lld di %2$lld passi";
 "Waiting for the Keychain: unlock your Mac to read this space." = "Attendo il portachiavi: sblocca il Mac per leggere questo spazio.";
+"Questions" = "Domande";
+"%@ asks you" = "%@ ti chiede";
+"Sent to %@: %@" = "Inviato a %1$@: %2$@";
+"Sending…" = "Invio…";
+"No agent is waiting for an answer." = "Nessun agente aspetta una risposta.";
+"Open the conversation" = "Apri la conversazione";
+"All questions (%d)" = "Tutte le domande (%d)";

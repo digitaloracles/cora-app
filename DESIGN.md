@@ -73,3 +73,10 @@ SF Pro only; digits `monospacedDigit()`. Monospaced design only for tool names, 
 ## Copy
 
 English with Italian localization. Sentence case, short, no exclamation marks. Countdowns `2h 10m`, `3d 4h` (`3g 4h`). Token counts `950`, `45.2k`, `1.25M`.
+
+## iOS: live work
+
+- **What runs now updates by itself.** While the app is in front, the event stream moves every running turn step by step; a full snapshot is read again on start, end and plan events and once a minute.
+- **Live dot** (`LiveDot`): the green state dot pulses (opacity 1 ↔ 0.3, 0.8 s) while an agent works; still otherwise.
+- **Live line** (`LiveNowLine`): in thread and plan rows, in place of the last reasoning: pulsing dot 7, «Buzz sta lavorando» footnote semibold green, elapsed time caption2 secondary; under it the step the agent is on, footnote secondary, italic for thinking, two lines at most.
+- **Thread and plan details**: each running turn in its own section (in a thread before the finished turns, in a plan after the checklist) headed by the live dot, «<agent> sta lavorando» and the elapsed time, steps newest first as they arrive; the finished turns follow and are read again whenever a turn starts or ends.

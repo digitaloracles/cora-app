@@ -1,6 +1,13 @@
 import CoraKit
 import Foundation
 
+/// A turn running now, with the agent that runs it.
+struct LiveRun: Identifiable {
+    let agent: Agent
+    let live: LiveTrace
+    var id: String { live.traceId }
+}
+
 /// One space as the iPhone shows it: the last snapshot, the live steps from the event stream, the connection state.
 /// Reads only, like the Mac app; the single write is signing this iPhone out.
 @MainActor
@@ -22,6 +29,12 @@ final class SpaceStore: ObservableObject, Identifiable {
     @Published private(set) var loadingOlderPlans = false
     /// The reasoning linked to checklist items, by `planId/itemId`, read when an item is opened.
     @Published private(set) var planReasoning: [String: [Step]] = [:]
+
+    /// Questions this device is answering now, so a second press waits for the first.
+    @Published private(set) var answering: Set<String> = []
+    /// The last answer sent from here, shown for a moment where the question was; and why the last press failed.
+    @Published private(set) var lastAnswer: (agentName: String, answer: String)?
+    @Published var choiceError: String?
 
     private(set) var client: CoraClient?
     private var streamTask: Task<Void, Never>?
@@ -50,6 +63,33 @@ final class SpaceStore: ObservableObject, Identifiable {
         demo = true
     }
 
+    /// `CORA_DEMO_CHANGE=1`: two seconds in, Ada's blocked plan starts again with Ada at work, as the snapshot brings it,
+    /// so the screenshots can check that rows change once and then stay still.
+    private func demoChange() {
+        guard ProcessInfo.processInfo.environment["CORA_DEMO_CHANGE"] == "1" else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, var next = self.snapshot else { return }
+            if var board = next.plans, let at = board.open.firstIndex(where: { $0.id == "plan_ada" }) {
+                board.open[at].status = .active
+                board.open[at].blockedReason = ""
+                board.open[at].updatedAt = Date()
+                next.plans = board
+                let plan = board.open[at]
+                if let agent = next.agents.firstIndex(where: { $0.id == plan.agentId }), let model = next.agents.first(where: { $0.id == "ag_buzz" })?.live.first {
+                    var live = model
+                    live.traceId = "tr_ada"
+                    live.channelId = plan.channelId
+                    live.threadName = plan.threadName
+                    live.startedAt = Date()
+                    next.agents[agent].live = [live]
+                    next.agents[agent].state = .working
+                }
+            }
+            self.snapshot = next
+        }
+    }
+
     init(connection: Connection, token: String) {
         self.connection = connection
         self.id = connection.server
@@ -60,7 +100,7 @@ final class SpaceStore: ObservableObject, Identifiable {
 
     /// Starts reading: a snapshot now and every minute, and the live stream while the app is in front.
     func start() {
-        if demo { return }
+        if demo { demoChange(); return }
         if client == nil {
             guard let token = Storage.token(for: connection) else {
                 phase = .failed(String(localized: "The access of this iPhone is missing: connect the space again."))
@@ -120,6 +160,33 @@ final class SpaceStore: ObservableObject, Identifiable {
         phase = .failed(message.isEmpty ? String(localized: "This iPhone was disconnected from the space. Connect it again from the panel.") : message)
     }
 
+    /// Presses one of the answers an agent offered: the agent hears it as the owner's word, and the question leaves the list.
+    func answer(_ request: ChoiceRequest, index: Int) async {
+        guard request.choices.indices.contains(index), !answering.contains(request.id) else { return }
+        if demo {
+            snapshot?.requests.removeAll { $0.id == request.id }
+            lastAnswer = (request.agentName, request.choices[index])
+            return
+        }
+        guard let client else { return }
+        answering.insert(request.id)
+        choiceError = nil
+        defer { answering.remove(request.id) }
+        do {
+            let sent = try await client.answer(request, index: index)
+            snapshot?.requests.removeAll { $0.id == request.id }
+            lastAnswer = (request.agentName, sent.answer)
+            let shown = sent.answer
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                if self?.lastAnswer?.answer == shown { self?.lastAnswer = nil }
+            }
+        } catch {
+            choiceError = error.localizedDescription
+        }
+        scheduleRefresh()
+    }
+
     private func scheduleRefresh() {
         pendingRefresh?.cancel()
         pendingRefresh = Task { [weak self] in
@@ -165,7 +232,7 @@ final class SpaceStore: ObservableObject, Identifiable {
                 if event.event == "end", let id = event.trace?.id { traces[id] = nil }
                 scheduleRefresh()
             }
-        case "subscription-usage", "agents", "agent-owners": scheduleRefresh()
+        case "subscription-usage", "agents", "agent-owners", "choice": scheduleRefresh()
         case "plan":
             if !event.planId.isEmpty { planReasoning = planReasoning.filter { !$0.key.hasPrefix(event.planId + "/") } }
             scheduleRefresh()
@@ -196,7 +263,26 @@ final class SpaceStore: ObservableObject, Identifiable {
         }
     }
 
+    /// The turns running now in a thread or channel, from the snapshot the stream keeps current.
+    func liveIn(_ channelId: String, agentId: String? = nil) -> [LiveRun] {
+        guard let snapshot, !channelId.isEmpty else { return [] }
+        return snapshot.agents.filter { agentId == nil || $0.id == agentId }.flatMap { agent in
+            agent.live.filter { $0.channelId == channelId }.map { LiveRun(agent: agent, live: $0) }
+        }
+    }
+
+    /// A thread as the snapshot lists it now, with its latest activity.
+    func threadInfo(_ id: String) -> ThreadInfo? {
+        snapshot?.agents.flatMap(\.threads).filter { $0.id == id }.max { ($0.lastAt ?? .distantPast) < ($1.lastAt ?? .distantPast) }
+    }
+
+    func registerPush(_ token: String, environment: String) async {
+        guard !demo, let client else { return }
+        try? await client.registerPush(token: token, environment: environment)
+    }
+
     func loadThread(_ id: String) async -> ThreadDetail? {
+        if demo { return Samples.threadDetail(id) }
         guard let client else { return nil }
         return try? await client.thread(id)
     }

@@ -60,11 +60,37 @@ jobs:
           shot 5-spaces SIMCTL_CHILD_CORA_DEMO_TAB=spaces
           shot 6-plans SIMCTL_CHILD_CORA_DEMO_TAB=plans
           shot 7-plan SIMCTL_CHILD_CORA_DEMO_TAB=plans SIMCTL_CHILD_CORA_DEMO_PLAN=plan_buzz SIMCTL_CHILD_CORA_DEMO_PLAN_ITEM=plan_buzz/item_3
+          shot 8-thread SIMCTL_CHILD_CORA_DEMO_TAB=threads SIMCTL_CHILD_CORA_DEMO_THREAD=1000000000000000001
+          shot 9-questions SIMCTL_CHILD_CORA_DEMO_TAB=agents SIMCTL_CHILD_CORA_DEMO_QUESTIONS=1
+          shot 10-thread-question SIMCTL_CHILD_CORA_DEMO_TAB=threads SIMCTL_CHILD_CORA_DEMO_THREAD=1000000000000000001 SIMCTL_CHILD_CORA_DEMO_QUESTIONS=1
           xcrun simctl terminate "$DEVICE" space.usecora.ios 2>/dev/null || true
           xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "($SHOT_LANGUAGE)" -AppleLocale "${SHOT_LANGUAGE}_$([ "$SHOT_LANGUAGE" = en ] && echo US || echo IT)"
           sleep 6
           xcrun simctl io "$DEVICE" screenshot build/screenshots/0-connect.png
           ls -la build/screenshots
+      - name: Live rows stay still (bursts of frames while an agent works)
+        env:
+          SHOT_LANGUAGE: ${{ inputs.language || 'it' }}
+        run: |
+          DEVICE=$(xcrun simctl list devices booted -j | python3 -c 'import json,sys; print(next(d["udid"] for v in json.load(sys.stdin)["devices"].values() for d in v))')
+          mkdir -p build/screenshots/bursts
+          burst() {
+            name=$1; shift
+            xcrun simctl terminate "$DEVICE" space.usecora.ios 2>/dev/null || true
+            env SIMCTL_CHILD_CORA_DEMO=1 "$@" xcrun simctl launch "$DEVICE" space.usecora.ios -AppleLanguages "($SHOT_LANGUAGE)" -AppleLocale "${SHOT_LANGUAGE}_$([ "$SHOT_LANGUAGE" = en ] && echo US || echo IT)"
+            sleep 5
+            for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+              xcrun simctl io "$DEVICE" screenshot "build/screenshots/bursts/$name-$i.png" >/dev/null 2>&1
+              sleep 0.15
+            done
+          }
+          burst agents SIMCTL_CHILD_CORA_DEMO_TAB=agents
+          burst threads SIMCTL_CHILD_CORA_DEMO_TAB=threads
+          burst thread SIMCTL_CHILD_CORA_DEMO_TAB=threads SIMCTL_CHILD_CORA_DEMO_THREAD=1000000000000000001
+          burst plans SIMCTL_CHILD_CORA_DEMO_TAB=plans
+          burst plans-change SIMCTL_CHILD_CORA_DEMO_TAB=plans SIMCTL_CHILD_CORA_DEMO_CHANGE=1
+          burst agents-change SIMCTL_CHILD_CORA_DEMO_TAB=agents SIMCTL_CHILD_CORA_DEMO_CHANGE=1
+          ls build/screenshots/bursts | wc -l
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -97,6 +123,23 @@ jobs:
           mkdir -p "$RUNNER_TEMP/keys"
           printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
           chmod 600 "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+      - name: Install the CI development certificate
+        env:
+          IOS_DEV_P12: ${{ secrets.IOS_DEV_P12 }}
+          IOS_DEV_P12_PASSWORD: ${{ secrets.IOS_DEV_P12_PASSWORD }}
+        run: |
+          # One persistent certificate, so a run does not create (and use up) a new one on the team.
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          printf '%s' "$IOS_DEV_P12" | base64 --decode > "$RUNNER_TEMP/dev.p12"
+          security import "$RUNNER_TEMP/dev.p12" -k "$KEYCHAIN" -P "$IOS_DEV_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/dev.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KEYCHAIN"
       - name: Archive and export a development build
         run: |
           set -o pipefail
@@ -121,9 +164,11 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :Name' -c 'Print :ExpirationDate' -c 'Print :Entitlements:application-identifier' profile.plist
           /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' profile.plist | sed 's/^/device /'
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' -c 'Print :CFBundleShortVersionString' -c 'Print :CFBundleVersion' "$APP/Info.plist" | tee ../export/bundle.txt
-      - name: Remove the key
+      - name: Remove the keys
         if: always()
-        run: rm -rf "$RUNNER_TEMP/keys"
+        run: |
+          rm -rf "$RUNNER_TEMP/keys"
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
           name: Cora-iOS

@@ -81,7 +81,7 @@ struct StateBadge: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
+            LiveDot(color: color, pulsing: state == .working)
             Text(label).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 6).padding(.vertical, 2)
@@ -104,6 +104,63 @@ struct StateBadge: View {
         case .idle: return Color.secondary.opacity(0.6)
         case .off: return Color.secondary.opacity(0.3)
         }
+    }
+}
+
+/// A state dot; while an agent works it pulses, so a running turn shows at a glance.
+/// The pulse is computed from the clock, not started as a repeating animation: a `repeatForever` transaction
+/// also catches the layout of the row it appears in, and the text beside the dot kept coming apart and starting over.
+struct LiveDot: View {
+    var color: Color = .green
+    var size: CGFloat = 6
+    var pulsing = true
+
+    var body: some View {
+        if pulsing {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                dot.opacity(Self.opacity(at: context.date))
+            }
+        } else {
+            dot
+        }
+    }
+
+    private var dot: some View { Circle().fill(color).frame(width: size, height: size) }
+
+    /// Between 1 and 0.3 and back every 1.6 s, eased like the old animation.
+    static func opacity(at date: Date) -> Double {
+        let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
+        return 0.65 + 0.35 * cos(2 * .pi * phase)
+    }
+}
+
+/// Who is working in a thread right now, how long for, and the step they are on: refreshed by every step of the stream.
+struct LiveNowLine: View {
+    let runs: [LiveRun]
+
+    var body: some View {
+        if let first = runs.first {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    LiveDot(size: 7)
+                    Text(names).font(.footnote.weight(.semibold)).foregroundStyle(.green).lineLimit(1)
+                    if let start = first.live.startedAt {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(Format.elapsed(since: start, now: context.date)).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                        }
+                    }
+                }
+                if let step = first.live.lastStep, !step.headline.isEmpty {
+                    Text(step.headline).font(.footnote).foregroundStyle(.secondary).italic(step.kind == .thinking).lineLimit(2)
+                        .contentTransition(.opacity).animation(.default, value: step.id)
+                }
+            }
+        }
+    }
+
+    var names: String {
+        let list = runs.map(\.agent.name).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        return list.count == 1 ? String(localized: "\(list[0]) is working") : String(localized: "\(list.formatted()) are working")
     }
 }
 

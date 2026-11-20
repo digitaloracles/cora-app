@@ -115,6 +115,27 @@ try {
     await other.close();
   }
 
+  // 2c. An agent asks with answers to choose from: the app lists the question, a press answers it as the owner, and it leaves the list.
+  if (f.app.orchestrator.choices) {
+    await f.app.orchestrator.askOwner(store.agent(buzz.id), { question: "Install the new build now?", choices: ["Now", "Later"] }, { channelId: `web-${buzz.id}` });
+    const asked = await app(["--print"]);
+    assert.match(asked.stdout, /Questions: 1\n- (ch_[a-f0-9]{12}) Buzz · .*: Install the new build now\?\n    choices: 0=Now \| 1=Later/);
+    const id = /- (ch_[a-f0-9]{12}) Buzz/.exec(asked.stdout)[1];
+    const answered = await app(["--answer", id, "1"]);
+    note(`--answer → ${answered.code}: ${answered.stdout.trim()} ${answered.stderr.trim()}`);
+    assert.equal(answered.code, 0, answered.stderr);
+    assert.match(answered.stdout, /Answered Buzz: Later/);
+    const said = f.app.orchestrator.state(`web-${buzz.id}`).history.find((item) => item.kind === "owner" && item.choiceFor === buzz.id);
+    assert.equal(said?.content, "Later", "the agent hears the answer pressed in the app");
+    const again = await app(["--answer", id, "0"]);
+    assert.equal(again.code, 1, "a question is answered once");
+    assert.ok(!(await app(["--print"])).stdout.includes("Install the new build now?"), "answered, it leaves the app");
+    await f.app.orchestrator.askOwner(store.agent(ada.id), { question: "The gate passed. Promote to production?", choices: ["Yes", "No"] }, { channelId: `web-${ada.id}` });
+    note("questions: answered from the app, one left open for the screenshots");
+  } else {
+    note("questions: this Cora has no choices registry, skipped");
+  }
+
   // 3. Live reasoning, step by step, while a turn runs.
   const live = traces.start({ agentId: buzz.id, kind: "chat", channelId: `web-${buzz.id}`, model: "claude/claude-opus-5-5" });
   live.goal = "Read the quotas and report what is left";

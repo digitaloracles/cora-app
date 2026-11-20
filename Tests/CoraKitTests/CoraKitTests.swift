@@ -75,6 +75,20 @@ import Testing
         #expect(snapshot.openPlans(of: "ag_a").isEmpty)
     }
 
+    @Test func decodesQuestionsWithChoices() throws {
+        let json = ##"{"version":1,"space":{"name":"s","origin":"https://s"},"user":{"id":"u","name":"U","email":"","role":"owner"},"accounts":[],"agents":[],"requests":[{"id":"ch_0a1b2c3d4e5f","agentId":"ag_a","agentName":"Olga","color":"#4f9cf7","channelId":"123","threadName":"Launch","link":"https://discord.com/channels/1/123","question":"Publish now?","choices":["Publish","Later"],"askedAt":"2026-11-20T07:30:00.000Z"},{"agentId":"no-id"}]}"##
+        let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(json.utf8))
+        #expect(snapshot.requests.map(\.id) == ["ch_0a1b2c3d4e5f"], "a question without an id is skipped, not fatal")
+        let request = try #require(snapshot.requests.first)
+        #expect(request.choices == ["Publish", "Later"] && request.question == "Publish now?" && request.agentName == "Olga" && request.askedAt != nil)
+        let older = try JSONDecoder().decode(Snapshot.self, from: Data(#"{"version":1,"space":{"name":"s","origin":"https://s"},"user":{"id":"u","name":"U","email":"","role":"owner"},"accounts":[],"agents":[]}"#.utf8))
+        #expect(older.requests.isEmpty, "servers without questions list none")
+        let answer = try JSONDecoder().decode(ChoiceAnswer.self, from: Data(#"{"id":"ch_0a1b2c3d4e5f","answer":"Later"}"#.utf8))
+        #expect(answer.answer == "Later")
+        let event = try #require(ServerEvent.decode(#"{"type":"choice","agentId":"ag_a","channelId":"123","id":"ch_0a1b2c3d4e5f","status":"answered"}"#))
+        #expect(event.type == "choice" && event.choiceId == "ch_0a1b2c3d4e5f" && event.status == "answered")
+    }
+
     @Test func decodesPagesReasoningAndPlanEvents() throws {
         let page = try JSONDecoder().decode(PlanPage.self, from: Data(#"{"status":"history","plans":[{"id":"p","agentId":"a","name":"N","status":"completed","items":[{"id":"x","text":"X"}],"done":1}],"next":null}"#.utf8))
         #expect(page.plans.count == 1 && page.next == nil)

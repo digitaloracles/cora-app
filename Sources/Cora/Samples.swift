@@ -112,6 +112,18 @@ enum Samples {
         return Snapshot(space: .init(name: "notseb", origin: "https://notseb.usecora.space"), user: .init(id: "u_seb", name: "Sebastiano", email: "seb@usecora.space", role: "owner"), accounts: [claude, claudeBuzz, codex, grok, muse, gemini, kimi, ollama, deepseek], agents: agents, plans: plans)
     }()
 
+    static let requests: [ChoiceRequest] = [
+        ChoiceRequest(id: "ch_0a1b2c3d4e5f", agentId: "ag_buzz", agentName: "Buzz", color: "#f2a93b", channelId: "1572562024360054865", threadName: "App macOS: quote e reasoning dal vivo",
+                      link: "https://discord.com/channels/1/2", question: "The 0.2.15 build is ready and signed. Shall I install it on the MacBook now or wait until tonight?", choices: ["Install now", "Tonight", "Don't install"], askedAt: now.addingTimeInterval(-240)),
+        ChoiceRequest(id: "ch_6f5e4d3c2b1a", agentId: "ag_ada", agentName: "Ada", color: "#4f9cf7", channelId: "1570828502696075334", threadName: "Import Airbnb",
+                      question: "The gate passed on staging. Promote to production?", choices: ["Yes", "No"], askedAt: now.addingTimeInterval(-1500)),
+        ChoiceRequest(id: "ch_99887766aabb", agentId: "ag_nico", agentName: "Nico", color: "#e05aa5", channelId: "1563845389705023658", threadName: "#cora",
+                      question: "Which voice for the jingle?", choices: ["Warm", "Bright"], askedAt: now.addingTimeInterval(-4000)),
+    ]
+
+    /// The sample space with agents waiting for an answer.
+    static let asking: Snapshot = { var copy = snapshot; copy.requests = requests; return copy }()
+
     @MainActor static func selection() -> LiveSelection {
         let selection = LiveSelection()
         selection.agentId = "ag_buzz"

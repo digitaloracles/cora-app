@@ -71,6 +71,8 @@ public struct Snapshot: Decodable, Sendable {
     public var agents: [Agent]
     /// Plans across every thread; nil from servers that do not list them yet.
     public var plans: PlanBoard?
+    /// Questions agents asked with answers to choose from, newest first; empty from servers that do not list them yet.
+    public var requests: [ChoiceRequest]
 
     public struct Space: Decodable, Sendable, Hashable {
         public var name: String
@@ -86,7 +88,7 @@ public struct Snapshot: Decodable, Sendable {
         public init(id: String, name: String, email: String, role: String) { self.id = id; self.name = name; self.email = email; self.role = role }
     }
 
-    enum CodingKeys: String, CodingKey { case version, generatedAt, timezone, space, user, accounts, agents, plans }
+    enum CodingKeys: String, CodingKey { case version, generatedAt, timezone, space, user, accounts, agents, plans, requests }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -98,10 +100,11 @@ public struct Snapshot: Decodable, Sendable {
         accounts = c.list(.accounts)
         agents = c.list(.agents)
         plans = try? c.decodeIfPresent(PlanBoard.self, forKey: .plans)
+        requests = c.list(.requests)
     }
 
-    public init(version: Int = 1, generatedAt: Date? = Date(), timezone: String = "Europe/Rome", space: Space, user: User, accounts: [Account], agents: [Agent], plans: PlanBoard? = nil) {
-        self.version = version; self.generatedAt = generatedAt; self.timezone = timezone; self.space = space; self.user = user; self.accounts = accounts; self.agents = agents; self.plans = plans
+    public init(version: Int = 1, generatedAt: Date? = Date(), timezone: String = "Europe/Rome", space: Space, user: User, accounts: [Account], agents: [Agent], plans: PlanBoard? = nil, requests: [ChoiceRequest] = []) {
+        self.version = version; self.generatedAt = generatedAt; self.timezone = timezone; self.space = space; self.user = user; self.accounts = accounts; self.agents = agents; self.plans = plans; self.requests = requests
     }
 
     /// The open plans of one agent.
@@ -670,3 +673,34 @@ public struct PlanTaskReasoning: Decodable, Sendable {
         events = c.list(.events); next = try? c.decodeIfPresent(Int.self, forKey: .next)
     }
 }
+
+/// A question an agent asked with answers to choose from: pressing one answers it as the button in the chat would.
+public struct ChoiceRequest: Decodable, Sendable, Identifiable, Hashable {
+    public var id: String
+    public var agentId: String
+    public var agentName: String
+    public var color: String
+    public var channelId: String
+    public var threadName: String
+    public var link: String
+    public var question: String
+    public var choices: [String]
+    public var askedAt: Date?
+
+    enum CodingKeys: String, CodingKey { case id, agentId, agentName, color, channelId, threadName, link, question, choices, askedAt }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        agentId = c.text(.agentId); agentName = c.text(.agentName); color = c.text(.color); channelId = c.text(.channelId)
+        threadName = c.text(.threadName); link = c.text(.link); question = c.text(.question)
+        choices = (try? c.decodeIfPresent([String].self, forKey: .choices)) ?? []
+        askedAt = c.instant(.askedAt)
+    }
+    public init(id: String, agentId: String, agentName: String, color: String = "#f2a93b", channelId: String, threadName: String = "", link: String = "", question: String, choices: [String], askedAt: Date? = Date()) {
+        self.id = id; self.agentId = agentId; self.agentName = agentName; self.color = color; self.channelId = channelId
+        self.threadName = threadName; self.link = link; self.question = question; self.choices = choices; self.askedAt = askedAt
+    }
+}
+
+/// What the space answered when one of the choices was pressed.
+public struct ChoiceAnswer: Decodable, Sendable { public var id: String; public var answer: String }
