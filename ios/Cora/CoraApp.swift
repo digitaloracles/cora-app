@@ -73,6 +73,7 @@ struct SpaceTabs: View {
     @ObservedObject var spaces: Spaces
     @ObservedObject var store: SpaceStore
     @Binding var tab: Tab
+    @Environment(\.scenePhase) private var phase
     @State private var agentPath: [String] = ProcessInfo.processInfo.environment["CORA_DEMO_AGENT"].map { [$0] } ?? []
     @State private var threadPath: [ThreadRoute] = ProcessInfo.processInfo.environment["CORA_DEMO_THREAD"].map { [ThreadRoute(id: $0)] } ?? []
     @State private var planPath: [PlanRoute] = ProcessInfo.processInfo.environment["CORA_DEMO_PLAN"].map { [PlanRoute(id: $0)] } ?? []
@@ -93,9 +94,11 @@ struct SpaceTabs: View {
                 .tabItem { Label("Spaces", systemImage: "square.stack") }.tag(Tab.spaces)
         }
         .onChange(of: store.revoked) { _, revoked in if revoked { spaces.forget(store) } }
-        .onReceive(Notices.shared.$notice) { take($0) }
-        // A tap that launched the app arrives before these tabs exist: it waits in `Notices` and is opened here.
-        .task { take(Notices.shared.notice) }
+        // A tap arrives while the app is still coming back to the front, or before these tabs exist when it launched the app:
+        // the notice waits in `Notices` and opens once the scene is active.
+        .onReceive(Notices.shared.$notice) { notice in if phase == .active { take(notice) } }
+        .onChange(of: phase) { _, now in if now == .active { take(Notices.shared.notice) } }
+        .task { if phase == .active { take(Notices.shared.notice) } }
     }
 
     private func take(_ notice: Notice?) {
