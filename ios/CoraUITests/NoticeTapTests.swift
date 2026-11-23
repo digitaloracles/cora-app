@@ -17,7 +17,7 @@ final class NoticeTapTests: XCTestCase {
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         let allow = springboard.alerts.buttons["Allow"]
-        if allow.waitForExistence(timeout: 4) { allow.tap() }
+        if allow.waitForExistence(timeout: 2) { allow.tap() }
         XCTAssert(app.navigationBars["Spaces"].waitForExistence(timeout: 10), "the app starts on the Spaces tab")
         return app
     }
@@ -43,7 +43,7 @@ final class NoticeTapTests: XCTestCase {
     }
 
     func testA_PlanWithTheAppClosed() {
-        let app = launch(["title": "Buzz is blocked", "body": "Q3 report for the team", "planId": "plan_buzz", "channelId": "1000000000000000001", "kind": "plan-blocked", "url": "/#/thread/t/1000000000000000001", "space": "https://acme.usecora.space"], delay: 8)
+        let app = launch(["title": "Buzz is blocked", "body": "Q3 report for the team", "planId": "plan_buzz", "channelId": "1000000000000000001", "kind": "plan-blocked", "url": "/#/thread/t/1000000000000000001", "space": "https://acme.usecora.space"], delay: 12)
         app.terminate()
         XCTAssertEqual(app.state, .notRunning)
         tapNotification("Buzz is blocked")
@@ -51,7 +51,7 @@ final class NoticeTapTests: XCTestCase {
     }
 
     func testB_ThreadWithTheAppInTheBackground() {
-        let app = launch(["title": "Buzz in Quarterly report", "body": "The report is ready", "channelId": "1000000000000000001", "kind": "thread", "url": "/#/thread/t/1000000000000000001", "space": "https://acme.usecora.space"], delay: 6)
+        let app = launch(["title": "Buzz in Quarterly report", "body": "The report is ready", "channelId": "1000000000000000001", "kind": "thread", "url": "/#/thread/t/1000000000000000001", "space": "https://acme.usecora.space"], delay: 12)
         XCUIDevice.shared.press(.home)
         tapNotification("Buzz in Quarterly report")
         expectScreen(app, title: "Quarterly report", "thread opened from the background")
@@ -64,14 +64,14 @@ final class NoticeTapTests: XCTestCase {
     }
 
     func testD_QuotaOpensTheSubscriptions() {
-        let app = launch(["title": "Claude Max: 25% left", "body": "Session", "kind": "quota", "url": "/"], delay: 6)
+        let app = launch(["title": "Claude Max: 25% left", "body": "Session", "kind": "quota", "url": "/"], delay: 12)
         XCUIDevice.shared.press(.home)
         tapNotification("Claude Max: 25% left")
         expectScreen(app, title: "Subscriptions", "subscriptions opened from a quota alert")
     }
 
     func testE_PanelPageOpensInTheBrowser() {
-        _ = launch(["title": "Vault", "body": "A secret arrived", "kind": "panel", "url": "/#/artefatti/segreti", "space": "https://acme.usecora.space", "link": "https://acme.usecora.space/#/artefatti/segreti"], delay: 6)
+        _ = launch(["title": "Vault", "body": "A secret arrived", "kind": "panel", "url": "/#/artefatti/segreti", "space": "https://acme.usecora.space", "link": "https://acme.usecora.space/#/artefatti/segreti"], delay: 12)
         XCUIDevice.shared.press(.home)
         tapNotification("Vault")
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")

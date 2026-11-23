@@ -93,12 +93,16 @@ struct SpaceTabs: View {
                 .tabItem { Label("Spaces", systemImage: "square.stack") }.tag(Tab.spaces)
         }
         .onChange(of: store.revoked) { _, revoked in if revoked { spaces.forget(store) } }
-        .onReceive(Notices.shared.$notice) { notice in
-            guard let notice else { return }
-            if !notice.belongs(to: store.id) && spaces.stores.contains(where: { notice.belongs(to: $0.id) }) { return }
-            open(notice.route)
-            Notices.shared.notice = nil
-        }
+        .onReceive(Notices.shared.$notice) { take($0) }
+        // A tap that launched the app arrives before these tabs exist: it waits in `Notices` and is opened here.
+        .task { take(Notices.shared.notice) }
+    }
+
+    private func take(_ notice: Notice?) {
+        guard let notice else { return }
+        if !notice.belongs(to: store.id) && spaces.stores.contains(where: { notice.belongs(to: $0.id) }) { return }
+        Notices.shared.notice = nil
+        open(notice.route)
     }
 
     /// Opens a tapped notification: its plan, thread or agent on top of its tab, the subscriptions, or the panel page in the browser.
