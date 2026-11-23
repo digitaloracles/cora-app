@@ -280,6 +280,25 @@ import Testing
         #expect(Storage.loadConnection()?.server == dopamina.server)
     }
 
+    @Test func dismissedQuestionsStayHiddenPerSpaceForAWeek() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("cora-dismissed-\(UUID().uuidString)")
+        setenv("CORA_APP_HOME", home.path, 1)
+        defer { unsetenv("CORA_APP_HOME"); try? FileManager.default.removeItem(at: home) }
+        let notseb = try #require(URL(string: "https://notseb.usecora.space")), other = try #require(URL(string: "https://dopamina.usecora.space"))
+        let asked = ChoiceRequest(id: "ch_06a79a74c48c", agentId: "ag_vera", agentName: "Vera", channelId: "1563814774452518986", question: "Come procedo?", choices: ["Aspetto", "Ricontrolla"])
+        let kept = ChoiceRequest(id: "ch_99887766aabb", agentId: "ag_nico", agentName: "Nico", channelId: "1563845389705023658", question: "Which voice?", choices: ["Warm", "Bright"])
+        var snapshot = try fixture()
+        snapshot.requests = [asked, kept]
+        #expect(snapshot.hidingDismissed(server: notseb).requests.map(\.id) == [asked.id, kept.id])
+        let then = Date().addingTimeInterval(-3600)
+        DismissedQuestions.add(asked.id, server: notseb, now: then)
+        #expect(DismissedQuestions.load(server: notseb, now: then.addingTimeInterval(3600)) == [asked.id])
+        #expect(DismissedQuestions.load(server: other, now: then).isEmpty, "another space keeps its questions")
+        #expect(DismissedQuestions.load(server: notseb, now: then.addingTimeInterval(8 * 86_400)).isEmpty, "a week later the device forgets it")
+        #expect(snapshot.hidingDismissed(server: notseb).requests.map(\.id) == [kept.id], "the snapshot no longer shows it on this device")
+        #expect(snapshot.hidingDismissed(server: other).requests.count == 2)
+    }
+
     @Test func pinsPersistPerSpace() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("cora-pins-\(UUID().uuidString)")
         setenv("CORA_APP_HOME", home.path, 1)
@@ -324,5 +343,37 @@ import Testing
         let history = UsageHistory(snapshot: snapshot)
         #expect(history.today == "2026-11-19", "today in the space's time zone")
         #expect(history.usage == [UsageHistory.Row(agentId: "a", day: "2026-11-17", tokensIn: 10, tokensOut: 5, turns: 1)])
+    }
+}
+
+@Suite struct NoticeTests {
+    @Test func readsTheTargetTheSpaceNames() throws {
+        let plan = try #require(Notice(payload: ["planId": "plan_1", "channelId": "123", "kind": "plan-blocked", "url": "/#/thread/t/123", "space": "https://notseb.usecora.space"]))
+        #expect(plan.route == .plan("plan_1"))
+        #expect(plan.space?.host == "notseb.usecora.space")
+        #expect(Notice(payload: ["channelId": "123", "kind": "thread"])?.route == .thread("123"))
+        #expect(Notice(payload: ["agentId": "ag_a", "kind": "agent"])?.route == .agent("ag_a"))
+        #expect(Notice(payload: ["kind": "quota", "url": "/"])?.route == .subscriptions)
+        #expect(Notice(payload: ["kind": "panel", "url": "/#/artefatti/segreti"])?.route == .panel("/#/artefatti/segreti"))
+        #expect(Notice(payload: ["aps": ["alert": ["title": "x"]]]) == nil)
+    }
+
+    @Test func readsOlderSpacesThatSendOnlyThePanelLink() {
+        #expect(Notice(payload: ["url": "/#/thread/t/1572562024360054865"])?.route == .thread("1572562024360054865"))
+        #expect(Notice(payload: ["url": "/#/thread/1572562024360054865"])?.route == .thread("1572562024360054865"))
+        #expect(Notice(payload: ["url": "/#/agent/ag_ff893fe5cfb6/chat"])?.route == .agent("ag_ff893fe5cfb6"))
+        #expect(Notice(payload: ["url": "/#/salotto"])?.route == .panel("/#/salotto"))
+        #expect(Notice(payload: ["channelId": "web-ag_a"])?.route == .agent("ag_a"), "an agent's private panel room opens the agent")
+        #expect(Notice(payload: ["url": "/#/thread/t/web"])?.route == .panel("/#/thread/t/web"))
+    }
+
+    @Test func opensPanelPagesOnTheSpaceAndMatchesItsSpace() throws {
+        let origin = try #require(URL(string: "https://notseb.usecora.space"))
+        #expect(Notice.panelURL("/#/artefatti/segreti", origin: origin)?.absoluteString == "https://notseb.usecora.space/#/artefatti/segreti")
+        #expect(Notice.panelURL("https://notseb.usecora.space/#/brain", origin: origin)?.absoluteString == "https://notseb.usecora.space/#/brain")
+        let notice = try #require(Notice(payload: ["channelId": "1", "space": "https://notseb.usecora.space"]))
+        #expect(notice.belongs(to: origin))
+        #expect(!notice.belongs(to: try #require(URL(string: "https://dopamina.usecora.space"))))
+        #expect(try #require(Notice(payload: ["channelId": "1"])).belongs(to: origin), "a notice without its space belongs to the one on screen")
     }
 }

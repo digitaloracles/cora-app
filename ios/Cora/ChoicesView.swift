@@ -2,7 +2,7 @@ import CoraKit
 import SwiftUI
 
 /// A question an agent asked with answers to choose from. Tapping one answers it as the button in the chat would:
-/// the agent hears it as the owner's word, and the chat shows the answer in place of its buttons.
+/// the agent hears it as the owner's word, and the chat shows the answer in place of its buttons. The cross, or a swipe, sets it aside.
 struct ChoiceCard: View {
     @ObservedObject var store: SpaceStore
     let request: ChoiceRequest
@@ -23,7 +23,14 @@ struct ChoiceCard: View {
                     .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 4)
-                if busy { ProgressView() }
+                if busy {
+                    ProgressView()
+                } else {
+                    Button { Task { await store.dismiss(request) } } label: {
+                        Image(systemName: "xmark").font(.footnote.weight(.semibold)).foregroundStyle(.secondary).frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(.borderless).accessibilityLabel(String(localized: "Ignore"))
+                }
             }
             Text(request.question).font(.body).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             VStack(spacing: 8) {
@@ -57,7 +64,12 @@ struct ChoiceSection: View {
                     Label(String(format: String(localized: "Sent to %@: %@"), sent.agentName, sent.answer), systemImage: "checkmark.circle.fill")
                         .font(.footnote).foregroundStyle(.green)
                 }
-                ForEach(requests) { ChoiceCard(store: store, request: $0, showThread: showThread) }
+                ForEach(requests) { request in
+                    ChoiceCard(store: store, request: request, showThread: showThread)
+                        .swipeActions(edge: .trailing) {
+                            Button(String(localized: "Ignore")) { Task { await store.dismiss(request) } }.tint(.gray)
+                        }
+                }
             } header: {
                 Text("Questions")
             }

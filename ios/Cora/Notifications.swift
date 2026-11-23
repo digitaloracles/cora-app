@@ -3,20 +3,14 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
-/// What a tapped notification asks to open.
-enum NoticeTarget: Equatable {
-    case plan(String)
-    case thread(String)
-}
-
 /// The APNs side of the app: asks once for permission, keeps this phone's token and hands it to every connected space,
-/// shows notices while the app is in front and opens the plan or thread a tapped one is about.
+/// shows notices while the app is in front and opens what a tapped one is about, also when the tap launches the app.
 @MainActor
 final class Notices: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     static let shared = Notices()
 
     @Published private(set) var token: String?
-    @Published var target: NoticeTarget?
+    @Published var notice: Notice?
     /// Development builds are signed for the APNs sandbox.
     let environment = "sandbox"
 
@@ -32,15 +26,36 @@ final class Notices: NSObject, ObservableObject, UNUserNotificationCenterDelegat
         token = deviceToken.map { String(format: "%02x", $0) }.joined()
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+    // The completion handlers are called on the main thread: the async versions of these methods return on a background thread,
+    // and UIKit then updates the app snapshot from there and stops the app ("Call must be made on main thread") when a tap brings it back from the background.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        DispatchQueue.main.async { completionHandler([.banner, .list, .sound]) }
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        let info = response.notification.request.content.userInfo
-        let plan = info["planId"] as? String, channel = info["channelId"] as? String
-        await MainActor.run {
-            if let plan, !plan.isEmpty { target = .plan(plan) } else if let channel, !channel.isEmpty { target = .thread(channel) }
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        let notice = Notice(payload: response.notification.request.content.userInfo)
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { if let notice { self.notice = notice } }
+            completionHandler()
+        }
+    }
+
+    /// `CORA_DEMO_NOTICE`: the sample space posts itself a notification with that payload (JSON) a few seconds in, so a UI test can tap it from the lock screen or the home screen.
+    func scheduleDemoNotice() {
+        guard Spaces.demo, let json = ProcessInfo.processInfo.environment["CORA_DEMO_NOTICE"], let data = json.data(using: .utf8),
+              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        let delay = Double(ProcessInfo.processInfo.environment["CORA_DEMO_NOTICE_DELAY"] ?? "") ?? 4
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = payload["title"] as? String ?? "Cora"
+            content.body = payload["body"] as? String ?? ""
+            content.userInfo = payload
+            center.add(UNNotificationRequest(identifier: "demo-notice", content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)))
         }
     }
 }

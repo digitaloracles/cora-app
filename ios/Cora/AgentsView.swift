@@ -128,6 +128,8 @@ struct AgentDetailView: View {
             .navigationTitle(agent.name)
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { await store.refresh() }
+        } else if store.snapshot == nil {
+            ProgressView("Reading the space…")
         } else {
             ContentUnavailableView("Agent not found", systemImage: "person.crop.circle.badge.questionmark")
         }

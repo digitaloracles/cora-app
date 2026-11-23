@@ -92,6 +92,19 @@ public struct CoraClient: Sendable {
         return try JSONDecoder().decode(ChoiceAnswer.self, from: data)
     }
 
+    /// Sets a question aside: it leaves every app and the agent hears nothing. False when the space is older than
+    /// this route and the question can only be hidden on this device; a question already closed counts as set aside.
+    @discardableResult
+    public func dismiss(_ request: ChoiceRequest) async throws -> Bool {
+        var call = self.request("/app/v1/choices/\(request.id)/dismiss", method: "POST")
+        call.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        call.httpBody = Data("{}".utf8)
+        let (data, response) = try await session.data(for: call)
+        if let http = response as? HTTPURLResponse, [404, 405, 409].contains(http.statusCode) { return http.statusCode == 409 }
+        try Self.check(data, response)
+        return true
+    }
+
     public func signOut() async throws {
         let (data, response) = try await session.data(for: request("/app/v1/session", method: "DELETE"))
         try Self.check(data, response)

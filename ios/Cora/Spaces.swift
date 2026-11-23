@@ -27,7 +27,12 @@ final class Spaces: NSObject, ObservableObject, ASWebAuthenticationPresentationC
         selected = stores.first?.id
     }
 
-    static var demo: Bool { ProcessInfo.processInfo.environment["CORA_DEMO"] == "1" }
+    /// The sample space. `CORA_DEMO_STICKY=1` keeps it for the next launches too, so a UI test can check a notification tapped after the app was closed.
+    static var demo: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        if environment["CORA_DEMO"] == "1" && environment["CORA_DEMO_STICKY"] == "1" { UserDefaults.standard.set(true, forKey: "CoraDemoSticky") }
+        return environment["CORA_DEMO"] == "1" || UserDefaults.standard.bool(forKey: "CoraDemoSticky")
+    }
 
     var current: SpaceStore? { stores.first { $0.id == selected } ?? stores.first }
 

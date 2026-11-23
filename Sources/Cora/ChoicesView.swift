@@ -2,7 +2,7 @@ import CoraKit
 import SwiftUI
 
 /// A question an agent asked with answers to choose from. Pressing one answers it as the button in the chat would:
-/// the agent hears it as the owner's word, and the chat shows the answer in place of its buttons.
+/// the agent hears it as the owner's word, and the chat shows the answer in place of its buttons. The cross sets it aside.
 struct ChoiceCard: View {
     @ObservedObject var store: SpaceStore
     let request: ChoiceRequest
@@ -28,6 +28,10 @@ struct ChoiceCard: View {
                     Link(destination: url) { Image(systemName: "arrow.up.right.square") }
                         .font(.system(size: 12)).foregroundStyle(.secondary).help(String(localized: "Open the conversation"))
                 }
+                Button { Task { await store.dismiss(request) } } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.borderless).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                    .help(String(localized: "Ignore this question")).accessibilityLabel(String(localized: "Ignore"))
+                    .disabled(busy)
             }
             Text(request.question).font(.system(size: 13)).lineLimit(compact ? 6 : nil).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             ViewThatFits(in: .horizontal) {

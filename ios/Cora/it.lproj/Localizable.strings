@@ -95,3 +95,4 @@
 "Questions" = "Domande";
 "%@ asks you" = "%@ ti chiede";
 "Sent to %@: %@" = "Inviato a %1$@: %2$@";
+"Ignore" = "Ignora";

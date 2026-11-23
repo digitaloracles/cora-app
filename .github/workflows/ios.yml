@@ -91,6 +91,32 @@ jobs:
           burst plans-change SIMCTL_CHILD_CORA_DEMO_TAB=plans SIMCTL_CHILD_CORA_DEMO_CHANGE=1
           burst agents-change SIMCTL_CHILD_CORA_DEMO_TAB=agents SIMCTL_CHILD_CORA_DEMO_CHANGE=1
           ls build/screenshots/bursts | wc -l
+      - name: Tapping a notification opens its screen (UI test on the simulator)
+        run: |
+          set -o pipefail
+          DEVICE=$(xcrun simctl list devices booted -j | python3 -c 'import json,sys; print(next(d["udid"] for v in json.load(sys.stdin)["devices"].values() for d in v))')
+          xcrun simctl terminate "$DEVICE" space.usecora.ios 2>/dev/null || true
+          xcodebuild test -project ios/CoraiOS.xcodeproj -scheme Cora -configuration Debug -destination "id=$DEVICE" \
+            -derivedDataPath build/uitest -resultBundlePath build/NoticeTaps.xcresult CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
+            > build/uitest.log 2>&1 || { tail -80 build/uitest.log; xcrun xcresulttool get test-results summary --path build/NoticeTaps.xcresult || true; exit 65; }
+          grep -E "Test (Case|Suite)" build/uitest.log | tail -30
+          xcrun xcresulttool get test-results summary --path build/NoticeTaps.xcresult || true
+      - name: Crash reports and log of the app during the notification taps
+        if: always()
+        run: |
+          mkdir -p build/screenshots/diagnostics
+          find ~/Library/Logs/DiagnosticReports -newer ios/project.yml \( -iname '*Cora*' -o -iname '*.ips' \) -exec cp {} build/screenshots/diagnostics/ \; 2>/dev/null || true
+          ls -la build/screenshots/diagnostics
+          for f in build/screenshots/diagnostics/*Cora*; do [ -f "$f" ] && head -c 6000 "$f"; done || true
+          xcrun simctl spawn booted log show --last 30m --style compact --predicate 'process == "Cora" AND (messageType == error OR messageType == fault OR eventMessage CONTAINS[c] "crash" OR eventMessage CONTAINS[c] "terminat")' > build/screenshots/diagnostics/cora-log.txt 2>&1 || true
+          xcrun simctl spawn booted log show --last 30m --style compact --predicate 'eventMessage CONTAINS[c] "space.usecora.ios" AND (eventMessage CONTAINS[c] "terminat" OR eventMessage CONTAINS[c] "watchdog" OR eventMessage CONTAINS[c] "crash" OR eventMessage CONTAINS[c] "exited")' > build/screenshots/diagnostics/system-log.txt 2>&1 || true
+          tail -60 build/screenshots/diagnostics/system-log.txt
+      - name: Screenshots of the notification taps
+        if: always()
+        run: |
+          mkdir -p build/screenshots/notices
+          xcrun xcresulttool export attachments --path build/NoticeTaps.xcresult --output-path build/screenshots/notices || true
+          ls -la build/screenshots/notices | head -40
       - uses: actions/upload-artifact@v4
         if: always()
         with:

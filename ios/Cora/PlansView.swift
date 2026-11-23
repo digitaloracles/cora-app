@@ -192,6 +192,8 @@ struct PlanDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { await store.refresh() }
             .task(id: plan.updatedAt) { for key in openItems { if let item = plan.items.first(where: { store.reasoningKey(plan, $0) == key || $0.id == key }) { await load(plan, item) } } }
+        } else if store.snapshot == nil {
+            ProgressView("Reading the space…")
         } else {
             ContentUnavailableView("Plan not found", systemImage: "checklist")
         }
