@@ -99,10 +99,9 @@ jobs:
           xcodebuild build-for-testing -project ios/CoraiOS.xcodeproj -scheme Cora -configuration Debug -destination "id=$DEVICE" \
             -derivedDataPath build/uitest CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
             > build/uitest-build.log 2>&1 || { grep -E "error:" build/uitest-build.log | head -20; tail -40 build/uitest-build.log; exit 65; }
-          ls build/uitest/Build/Products/Debug-iphonesimulator
           test -f build/uitest/Build/Products/Debug-iphonesimulator/Cora.app/Info.plist
-          xcodebuild test-without-building -project ios/CoraiOS.xcodeproj -scheme Cora -configuration Debug -destination "id=$DEVICE" \
-            -derivedDataPath build/uitest -resultBundlePath build/NoticeTaps.xcresult \
+          XCTESTRUN=$(ls build/uitest/Build/Products/*.xctestrun | head -1)
+          xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination "id=$DEVICE" -resultBundlePath build/NoticeTaps.xcresult \
             > build/uitest.log 2>&1 || { tail -80 build/uitest.log; xcrun xcresulttool get test-results summary --path build/NoticeTaps.xcresult || true; exit 65; }
           grep -E "Test (Case|Suite)" build/uitest.log | tail -30
           xcrun xcresulttool get test-results summary --path build/NoticeTaps.xcresult || true
