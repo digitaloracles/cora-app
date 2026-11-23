@@ -101,7 +101,7 @@ jobs:
             > build/uitest.log 2>&1 || { tail -80 build/uitest.log; xcrun xcresulttool get test-results summary --path build/NoticeTaps.xcresult || true; exit 65; }
           grep -E "Test (Case|Suite)" build/uitest.log | tail -30
           xcrun xcresulttool get test-results summary --path build/NoticeTaps.xcresult || true
-      - name: Crash reports and log of the app during the notification taps
+      - name: Crash reports and the log of the app during the notification taps
         if: always()
         run: |
           mkdir -p build/screenshots/diagnostics
