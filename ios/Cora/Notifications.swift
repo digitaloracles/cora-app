@@ -26,13 +26,20 @@ final class Notices: NSObject, ObservableObject, UNUserNotificationCenterDelegat
         token = deviceToken.map { String(format: "%02x", $0) }.joined()
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+    // The completion handlers are called on the main thread: the async versions of these methods return on a background thread,
+    // and UIKit then updates the app snapshot from there and stops the app ("Call must be made on main thread") when a tap brings it back from the background.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        DispatchQueue.main.async { completionHandler([.banner, .list, .sound]) }
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        guard let notice = Notice(payload: response.notification.request.content.userInfo) else { return }
-        await MainActor.run { self.notice = notice }
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        let notice = Notice(payload: response.notification.request.content.userInfo)
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { if let notice { self.notice = notice } }
+            completionHandler()
+        }
     }
 
     /// `CORA_DEMO_NOTICE`: the sample space posts itself a notification with that payload (JSON) a few seconds in, so a UI test can tap it from the lock screen or the home screen.
