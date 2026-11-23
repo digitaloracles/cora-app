@@ -138,7 +138,7 @@ final class SpaceStore: ObservableObject, Identifiable {
         guard let client else { return }
         do {
             let fresh = try await client.snapshot()
-            snapshot = fresh
+            snapshot = fresh.hidingDismissed(server: client.server)
             refreshedAt = Date()
             phase = .ready
             if connection.spaceName != fresh.space.name || connection.userName != fresh.user.name {
@@ -183,6 +183,22 @@ final class SpaceStore: ObservableObject, Identifiable {
             }
         } catch {
             choiceError = error.localizedDescription
+        }
+        scheduleRefresh()
+    }
+
+    /// Sets a question aside: on a space that knows the route it leaves every app, otherwise only this iPhone.
+    func dismiss(_ request: ChoiceRequest) async {
+        guard !answering.contains(request.id) else { return }
+        snapshot?.requests.removeAll { $0.id == request.id }
+        choiceError = nil
+        guard !demo, let client else { return }
+        answering.insert(request.id)
+        defer { answering.remove(request.id) }
+        do {
+            if try await !client.dismiss(request) { DismissedQuestions.add(request.id, server: client.server) }
+        } catch {
+            DismissedQuestions.add(request.id, server: client.server)
         }
         scheduleRefresh()
     }

@@ -280,6 +280,25 @@ import Testing
         #expect(Storage.loadConnection()?.server == dopamina.server)
     }
 
+    @Test func dismissedQuestionsStayHiddenPerSpaceForAWeek() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("cora-dismissed-\(UUID().uuidString)")
+        setenv("CORA_APP_HOME", home.path, 1)
+        defer { unsetenv("CORA_APP_HOME"); try? FileManager.default.removeItem(at: home) }
+        let notseb = try #require(URL(string: "https://notseb.usecora.space")), other = try #require(URL(string: "https://dopamina.usecora.space"))
+        let asked = ChoiceRequest(id: "ch_06a79a74c48c", agentId: "ag_vera", agentName: "Vera", channelId: "1563814774452518986", question: "Come procedo?", choices: ["Aspetto", "Ricontrolla"])
+        let kept = ChoiceRequest(id: "ch_99887766aabb", agentId: "ag_nico", agentName: "Nico", channelId: "1563845389705023658", question: "Which voice?", choices: ["Warm", "Bright"])
+        var snapshot = try fixture()
+        snapshot.requests = [asked, kept]
+        #expect(snapshot.hidingDismissed(server: notseb).requests.map(\.id) == [asked.id, kept.id])
+        let then = Date().addingTimeInterval(-3600)
+        DismissedQuestions.add(asked.id, server: notseb, now: then)
+        #expect(DismissedQuestions.load(server: notseb, now: then.addingTimeInterval(3600)) == [asked.id])
+        #expect(DismissedQuestions.load(server: other, now: then).isEmpty, "another space keeps its questions")
+        #expect(DismissedQuestions.load(server: notseb, now: then.addingTimeInterval(8 * 86_400)).isEmpty, "a week later the device forgets it")
+        #expect(snapshot.hidingDismissed(server: notseb).requests.map(\.id) == [kept.id], "the snapshot no longer shows it on this device")
+        #expect(snapshot.hidingDismissed(server: other).requests.count == 2)
+    }
+
     @Test func pinsPersistPerSpace() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("cora-pins-\(UUID().uuidString)")
         setenv("CORA_APP_HOME", home.path, 1)

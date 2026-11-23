@@ -14,7 +14,8 @@ packages:
   CoraApp:
     path: ..
 targets:
-  Cora:
+  # Not "Cora": the package's macOS executable has that name, and the UI tests would look for it instead of the app.
+  CoraiOS:
     type: application
     platform: iOS
     sources: [Cora]
@@ -49,17 +50,17 @@ targets:
     platform: iOS
     sources: [CoraUITests]
     dependencies:
-      - target: Cora
+      - target: CoraiOS
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: space.usecora.ios.uitests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_TARGET_NAME: Cora
+        TEST_TARGET_NAME: CoraiOS
 schemes:
   Cora:
     build:
       targets:
-        Cora: all
+        CoraiOS: all
         CoraUITests: [test]
     test:
       targets: [CoraUITests]

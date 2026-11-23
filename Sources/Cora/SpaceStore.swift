@@ -181,7 +181,7 @@ final class SpaceStore: ObservableObject {
         guard let client else { return }
         do {
             let fresh = try await client.snapshot()
-            snapshot = fresh
+            snapshot = fresh.hidingDismissed(server: client.server)
             await readHistory(client)
             refreshedAt = Date()
             phase = .ready
@@ -241,6 +241,22 @@ final class SpaceStore: ObservableObject {
             }
         } catch {
             choiceError = error.localizedDescription
+        }
+        scheduleRefresh()
+    }
+
+    /// Sets a question aside: on a space that knows the route it leaves every app, otherwise only this Mac.
+    func dismiss(_ request: ChoiceRequest) async {
+        guard !answering.contains(request.id) else { return }
+        snapshot?.requests.removeAll { $0.id == request.id }
+        choiceError = nil
+        guard let client else { return }
+        answering.insert(request.id)
+        defer { answering.remove(request.id) }
+        do {
+            if try await !client.dismiss(request) { DismissedQuestions.add(request.id, server: client.server) }
+        } catch {
+            DismissedQuestions.add(request.id, server: client.server)
         }
         scheduleRefresh()
     }

@@ -132,3 +132,5 @@
 "No agent is waiting for an answer." = "Nessun agente aspetta una risposta.";
 "Open the conversation" = "Apri la conversazione";
 "All questions (%d)" = "Tutte le domande (%d)";
+"Ignore" = "Ignora";
+"Ignore this question" = "Ignora questa domanda";
