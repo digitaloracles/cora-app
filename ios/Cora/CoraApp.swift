@@ -1,5 +1,6 @@
 import CoraKit
 import SwiftUI
+import UIKit
 
 @main
 struct CoraApp: App {
@@ -12,6 +13,7 @@ struct CoraApp: App {
         WindowGroup {
             RootView(spaces: spaces)
                 .onOpenURL { spaces.handle($0) }
+                .onAppear { notices.scheduleDemoNotice() }
                 .onChange(of: notices.token) { _, token in if let token { spaces.registerPush(token, environment: notices.environment) } }
                 .onChange(of: spaces.stores.count) { _, count in
                     guard count > 0 && !Spaces.demo else { return }
@@ -47,6 +49,12 @@ struct RootView: View {
             } else {
                 NavigationStack { ConnectView(spaces: spaces).navigationTitle("Cora") }
             }
+        }
+        // A notice from another connected space switches to it first; that space's tabs then open it.
+        .onReceive(Notices.shared.$notice) { notice in
+            guard let notice, let current = spaces.current, !notice.belongs(to: current.id),
+                  let other = spaces.stores.first(where: { notice.belongs(to: $0.id) }) else { return }
+            spaces.selected = other.id
         }
         .alert(unrequestedTitle, isPresented: Binding(get: { spaces.unrequested != nil }, set: { if !$0 { spaces.unrequested = nil } })) {
             Button("Connect") { if let link = spaces.unrequested { Task { await spaces.connect(link) } } }
@@ -85,13 +93,22 @@ struct SpaceTabs: View {
                 .tabItem { Label("Spaces", systemImage: "square.stack") }.tag(Tab.spaces)
         }
         .onChange(of: store.revoked) { _, revoked in if revoked { spaces.forget(store) } }
-        .onReceive(Notices.shared.$target) { target in
-            guard let target else { return }
-            switch target {
-            case .plan(let id): tab = .plans; planPath = [PlanRoute(id: id)]
-            case .thread(let id): tab = .threads; threadPath = [ThreadRoute(id: id)]
-            }
-            Notices.shared.target = nil
+        .onReceive(Notices.shared.$notice) { notice in
+            guard let notice else { return }
+            if !notice.belongs(to: store.id) && spaces.stores.contains(where: { notice.belongs(to: $0.id) }) { return }
+            open(notice.route)
+            Notices.shared.notice = nil
+        }
+    }
+
+    /// Opens a tapped notification: its plan, thread or agent on top of its tab, the subscriptions, or the panel page in the browser.
+    private func open(_ route: NoticeRoute) {
+        switch route {
+        case .plan(let id): tab = .plans; planPath = [PlanRoute(id: id)]
+        case .thread(let id): tab = .threads; threadPath = [ThreadRoute(id: id)]
+        case .agent(let id): tab = .agents; agentPath = [id]
+        case .subscriptions: tab = .subscriptions
+        case .panel(let path): if let url = Notice.panelURL(path, origin: store.id) { UIApplication.shared.open(url) }
         }
     }
 }
