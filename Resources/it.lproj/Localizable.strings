@@ -136,3 +136,6 @@
 "Close this plan?" = "Chiudere questo piano?";
 "Confirm closure" = "Conferma chiusura";
 "You can follow work, answer questions and close plans you manage." = "Puoi seguire il lavoro, rispondere alle domande e chiudere i piani che gestisci.";
+"Search plans" = "Cerca nei piani";
+"No plan in progress matches your search." = "Nessun piano in corso corrisponde alla ricerca.";
+"No finished plan matches your search." = "Nessun piano concluso corrisponde alla ricerca.";

@@ -257,6 +257,17 @@ import Testing
         #expect(Agent.matching(agents, "nobody").isEmpty)
     }
 
+    @Test func searchFindsPlansByNameAgentThreadAndChecklist() {
+        let plans = [Plan(id: "p", agentId: "a", agentName: "Primo", channelId: "c", threadName: "App iOS/macOS", name: "Chiudi piano", status: .active, items: [.init(id: "1", text: "Provare il percorso server")], done: 0, updatedAt: nil),
+                     Plan(id: "q", agentId: "b", agentName: "Véra", channelId: "d", threadName: "Ragusa Buzz", name: "Reel di novembre", status: .blocked, items: [.init(id: "2", text: "Render dei reel")], done: 0, blockedReason: "Manca la musica", updatedAt: nil)]
+        #expect(Plan.matching(plans, " ").map(\.id) == ["p", "q"])
+        #expect(Plan.matching(plans, "chiudi").map(\.id) == ["p"])
+        #expect(Plan.matching(plans, "vera").map(\.id) == ["q"], "accents do not matter")
+        #expect(Plan.matching(plans, "macos server").map(\.id) == ["p"], "every word, from the thread and the checklist")
+        #expect(Plan.matching(plans, "musica").map(\.id) == ["q"], "the blocker counts")
+        #expect(Plan.matching(plans, "nobody").isEmpty)
+    }
+
     @Test func twoSubscriptionsOfOneProviderKeepTheirLabels() {
         let usage = QuotaUsage(windows: [QuotaWindow(id: "w", kind: .weekly, usedPercent: 40, resetsAt: nil)])
         let snapshot = Snapshot(space: .init(name: "s", origin: "https://s.usecora.space"), user: .init(id: "u", name: "U", email: "u@x", role: "owner"),

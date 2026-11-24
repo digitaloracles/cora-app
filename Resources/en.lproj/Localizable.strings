@@ -3,3 +3,6 @@
 "Close this plan?" = "Close this plan?";
 "Confirm closure" = "Confirm closure";
 "Cancel" = "Cancel";
+"Search plans" = "Search plans";
+"No plan in progress matches your search." = "No plan in progress matches your search.";
+"No finished plan matches your search." = "No finished plan matches your search.";

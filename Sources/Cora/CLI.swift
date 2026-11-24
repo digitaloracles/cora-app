@@ -207,6 +207,10 @@ enum CLI {
                 try snapshot(PlansPage(store: store, plans: selection.plans, snapshot: store.snapshot!).environment(\.isStaticPreview, true), width: width, height: nil, appearance: appearance,
                              to: folder.appendingPathComponent("plans-page-\(Int(width))-\(name).png"))
             }
+            selection.plans.query = "buzz"
+            try snapshot(PlansPage(store: store, plans: selection.plans, snapshot: store.snapshot!).environment(\.isStaticPreview, true), width: 900, height: nil, appearance: appearance,
+                         to: folder.appendingPathComponent("plans-page-search-\(name).png"))
+            selection.plans.query = ""
             if let focus = store.snapshot?.plans?.open.last {
                 selection.show(LiveSelection.plan(focus.id))
                 try snapshot(PlansPage(store: store, plans: selection.plans, snapshot: store.snapshot!).environment(\.isStaticPreview, true), width: 900, height: nil, appearance: appearance,

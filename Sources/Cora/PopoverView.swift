@@ -25,6 +25,7 @@ struct PopoverView: View {
     var openAgent: (String?) -> Void = { _ in }
     @State var tab: PopoverTab = .agents
     @State var threadQuery = ""
+    @State var planQuery = ""
     @State var agentQuery = ""
     @StateObject private var planSelection = PlanSelection()
     @Environment(\.isStaticPreview) private var isStaticPreview
@@ -47,6 +48,7 @@ struct PopoverView: View {
                 .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 2)
                 if tab == .agents { SearchField(query: $agentQuery, prompt: String(localized: "Search agents")).padding(.horizontal, 10).padding(.top, 8) }
                 if tab == .threads { SearchField(query: $threadQuery, prompt: String(localized: "Search threads")).padding(.horizontal, 10).padding(.top, 8) }
+                if tab == .plans, snapshot.plans != nil { SearchField(query: $planQuery, prompt: String(localized: "Search plans")).padding(.horizontal, 10).padding(.top, 8) }
                 scrolling {
                     VStack(alignment: .leading, spacing: 14) {
                         switch tab {
@@ -99,8 +101,9 @@ struct PopoverView: View {
     /// Plans in progress by their head only: a click opens the window on the whole plan. Finished plans live in the window.
     @ViewBuilder func plans(_ snapshot: Snapshot) -> some View {
         if let list = snapshot.plans {
-            if list.open.isEmpty { empty("No plan in progress.") }
-            ForEach(list.open) { plan in PlanCard(store: store, plans: planSelection, plan: plan, compact: true, open: { openAgent(LiveSelection.plan(plan.id)) }) }
+            let open = Plan.matching(list.open, planQuery)
+            if list.open.isEmpty { empty("No plan in progress.") } else if open.isEmpty { empty("No plan in progress matches your search.") }
+            ForEach(open) { plan in PlanCard(store: store, plans: planSelection, plan: plan, compact: true, open: { openAgent(LiveSelection.plan(plan.id)) }) }
             Button(String(localized: "All plans")) { openAgent(LiveSelection.plans) }
                 .buttonStyle(.link).font(.system(size: 11)).padding(.horizontal, 2)
         } else {
