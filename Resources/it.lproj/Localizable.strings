@@ -139,3 +139,10 @@
 "Search plans" = "Cerca nei piani";
 "No plan in progress matches your search." = "Nessun piano in corso corrisponde alla ricerca.";
 "No finished plan matches your search." = "Nessun piano concluso corrisponde alla ricerca.";
+"Unlock" = "Sblocca";
+"macOS will ask you to unlock your Keychain." = "macOS ti chiederà di sbloccare il Portachiavi.";
+"Checking Keychain…" = "Verifica del Portachiavi…";
+"Unlocking…" = "Sblocco in corso…";
+"Retry" = "Riprova";
+"Unlock the Keychain" = "Sblocca il Portachiavi";
+"Keychain" = "Portachiavi";

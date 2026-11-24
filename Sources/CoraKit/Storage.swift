@@ -72,7 +72,11 @@ public enum Storage {
     }
 
     public static func token(for connection: Connection) -> String? {
-        try? Keychain.read(service: keychainService, account: connection.server.absoluteString)
+        try? readToken(for: connection)
+    }
+
+    public static func readToken(for connection: Connection) throws -> String? {
+        try Keychain.read(service: keychainService, account: connection.server.absoluteString)
     }
 
     /// Forgets one space: its token and its line; the other spaces stay.
@@ -99,6 +103,20 @@ public enum Storage {
 
 public enum Keychain {
     public enum Failure: Error { case status(OSStatus) }
+
+    #if os(macOS)
+    public static func isUnlocked(_ keychain: SecKeychain? = nil) throws -> Bool {
+        var flags: SecKeychainStatus = 0
+        let status = SecKeychainGetStatus(keychain, &flags)
+        guard status == errSecSuccess else { throw Failure.status(status) }
+        return flags & UInt32(kSecUnlockStateStatus) != 0
+    }
+
+    public static func requestUnlock(_ keychain: SecKeychain? = nil) throws {
+        let status = SecKeychainUnlock(keychain, 0, nil, false)
+        guard status == errSecSuccess else { throw Failure.status(status) }
+    }
+    #endif
 
     static func base(service: String, account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
