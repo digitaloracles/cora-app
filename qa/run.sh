@@ -11,13 +11,20 @@ macOS)
   python3 - <<'PY'
 from pathlib import Path
 p=Path('Sources/Cora/AppDelegate.swift')
-s=p.read_text().replace('        spaces.start()', '        spaces.start()\n        showWindow(agent: LiveSelection.plans)')
+s=p.read_text().replace('        spaces.start()', """        spaces.start()
+        Task { @MainActor in
+            do {
+                let (data, _) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:19428/pair")!)
+                let url = URL(string: String(decoding: data, as: UTF8.self))!
+                await spaces.current.connect(try ConnectLink.parse(url))
+                showWindow(agent: LiveSelection.plans)
+            } catch { fatalError("Fixture pairing failed") }
+        }""")
 p.write_text(s)
 PY
   (cd qa && xcodegen generate -s mac.yml)
   args=(-project qa/PlanMac.xcodeproj -scheme PlanMac -destination 'platform=macOS' -derivedDataPath build/ui CODE_SIGN_IDENTITY=-)
   xcodebuild build "${args[@]}" > "$2/build.log" 2>&1 || { tail -70 "$2/build.log"; exit 1; }
-  CORA_APP_HOME=/tmp/cora-fab-native-test build/ui/Build/Products/Debug/Cora.app/Contents/MacOS/Cora --connect "$(curl -fsS localhost:19428/pair)"
   filter=CloseUI/ClosePlanTests
   ;;
 iOS)
