@@ -35,14 +35,12 @@
 "Quota not available right now" = "Quota non disponibile adesso";
 "Quotas" = "Quote";
 "Reading the quota…" = "Leggo la quota…";
-"Read-only: the app never changes your agents or settings." = "Sola lettura: l’app non cambia mai agenti o impostazioni.";
 "Reconnecting to the live stream…" = "Mi ricollego alla diretta…";
 "Refresh" = "Aggiorna";
 "Resets in %@" = "Si azzera tra %@";
 "Signed in as %@" = "Collegato come %@";
 "Sign in again from the panel" = "Accedi di nuovo dal pannello";
 "Space address" = "Indirizzo dello spazio";
-"The app will read the agents, quotas and live work you see in that space. It cannot change anything." = "L’app leggerà gli agenti, le quote e il lavoro in corso che vedi in quello spazio. Non può modificare niente.";
 "The Keychain is locked: unlock your Mac to read this space." = "Il portachiavi è bloccato: sblocca il Mac per leggere questo spazio.";
 "The panel opens in your browser. Sign in there and authorize this Mac: Cora comes back here on its own." = "Il pannello si apre nel browser. Entra e autorizza questo Mac: Cora torna qui da sola.";
 "This link does not come from a Cora panel." = "Questo link non arriva da un pannello Cora.";
@@ -134,3 +132,7 @@
 "All questions (%d)" = "Tutte le domande (%d)";
 "Ignore" = "Ignora";
 "Ignore this question" = "Ignora questa domanda";
+"Close plan" = "Chiudi piano";
+"Close this plan?" = "Chiudere questo piano?";
+"Confirm closure" = "Conferma chiusura";
+"You can follow work, answer questions and close plans you manage." = "Puoi seguire il lavoro, rispondere alle domande e chiudere i piani che gestisci.";

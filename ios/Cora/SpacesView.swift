@@ -27,7 +27,7 @@ struct SpacesView: View {
                     }
                 }
             } footer: {
-                Text("Read only: the app sees the agents, quotas and live work you see in the panel and cannot change anything.")
+                Text("You can follow work, answer questions and close plans you manage.")
             }
             Section { Button { adding = true } label: { Label("Add a space", systemImage: "plus") } }
             if let current = spaces.current {
@@ -85,7 +85,7 @@ struct ConnectView: View {
                 .disabled(busy)
                 if let line = statusLine { Text(line.text).font(.footnote).foregroundStyle(line.error ? Color.red : Color.secondary) }
             } footer: {
-                Text("Read only: the app cannot change settings and does not see other people's private resources.")
+                Text("You can follow work, answer questions and close plans you manage.")
             }
         }
         .onChange(of: spaces.stores.count) { _, _ in done() }

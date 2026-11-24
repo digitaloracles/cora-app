@@ -265,7 +265,7 @@ struct ConnectPanel: View {
             if case .failed(let message) = store.phase {
                 Label(message, systemImage: "exclamationmark.triangle").font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            Text("Read-only: the app never changes your agents or settings.").font(.system(size: 10)).foregroundStyle(.tertiary)
+            Text("You can follow work, answer questions and close plans you manage.").font(.system(size: 10)).foregroundStyle(.tertiary)
         }
     }
 }

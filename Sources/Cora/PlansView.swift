@@ -126,6 +126,24 @@ struct PlanCard: View {
                 Label(plan.blockedReason, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 11)).foregroundStyle(.orange).lineLimit(3)
             }
+            if open == nil && plan.allowsOwnerClose {
+                Button("Close plan", role: .destructive) { store.planToClose = plan }
+                    .disabled(store.closingPlans.contains(plan.id))
+                    .confirmationDialog("Close this plan?", isPresented: Binding(
+                        get: { store.planToClose?.id == plan.id },
+                        set: { if !$0 && store.planToClose?.id == plan.id { store.planToClose = nil } }
+                    ), titleVisibility: .visible, presenting: store.planToClose) { selected in
+                        Button("Confirm closure", role: .destructive) {
+                            Task { await store.closePlan(selected) }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: { selected in
+                        Text(selected.name)
+                    }
+                if let message = store.closeErrors[plan.id] {
+                    Text(message).font(.caption).foregroundStyle(.red)
+                }
+            }
             if open == nil { PlanChecklist(store: store, plans: plans, plan: plan) }
         }
         .padding(compact ? 10 : 12)

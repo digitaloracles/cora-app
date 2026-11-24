@@ -57,11 +57,8 @@
 "Connect a Cora space" = "Collega uno spazio Cora";
 "Sign in to the panel of your space and authorize this iPhone: you will see your agents, their quotas and what they are doing now." = "Entra nel pannello del tuo spazio e autorizza questo iPhone: vedrai i tuoi agenti, le loro quote e cosa stanno facendo adesso.";
 "Space address" = "Indirizzo dello spazio";
-"Read only: the app cannot change settings and does not see other people's private resources." = "Sola lettura: l’app non modifica le impostazioni e non vede le risorse private di altre persone.";
-"Read only: the app sees the agents, quotas and live work you see in the panel and cannot change anything." = "Sola lettura: l’app vede gli agenti, le quote e il lavoro dal vivo che vedi nel pannello e non può cambiare niente.";
 "Disconnect this iPhone from %@?" = "Scollegare questo iPhone da %@?";
 "Connect this iPhone to %@?" = "Collegare questo iPhone a %@?";
-"The app will read the agents, quotas and live work you see in that space. It cannot change anything." = "L’app leggerà gli agenti, le quote e il lavoro dal vivo che vedi in quello spazio. Non può cambiare niente.";
 "Authorize this iPhone in the panel of %@." = "Autorizza questo iPhone nel pannello di %@.";
 "Connecting…" = "Collego…";
 "Write the address of your space, for example yourspace.usecora.space." = "Scrivi l’indirizzo del tuo spazio, per esempio yourspace.usecora.space.";
@@ -96,3 +93,7 @@
 "%@ asks you" = "%@ ti chiede";
 "Sent to %@: %@" = "Inviato a %1$@: %2$@";
 "Ignore" = "Ignora";
+"Close plan" = "Chiudi piano";
+"Close this plan?" = "Chiudere questo piano?";
+"Confirm closure" = "Conferma chiusura";
+"You can follow work, answer questions and close plans you manage." = "Puoi seguire il lavoro, rispondere alle domande e chiudere i piani che gestisci.";

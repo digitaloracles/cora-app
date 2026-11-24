@@ -19,7 +19,7 @@ Native macOS menu bar app (Swift 6 toolchain, Swift 5 language mode, AppKit + Sw
 
 ## Rules
 
-- The app only reads. The single write is `DELETE /app/v1/session` (sign this Mac out).
+- Device writes cover session and push registration, answering or dismissing questions, and closing a manageable plan at its displayed revision.
 - The token lives only in the Keychain, never in files, logs, previews or CLI output. `connection.json` holds server, names and device id.
 - A `cora://connect` link the app did not request (state missing or different) is confirmed by the person before connecting. Only `https` servers, or loopback `http` for local tests.
 - A 401 from any call or `access-revoked` on the stream forgets the connection and asks to connect again.

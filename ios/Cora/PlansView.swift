@@ -155,6 +155,24 @@ struct PlanDetailView: View {
                     if plan.status == .blocked && !plan.blockedReason.isEmpty {
                         Label(plan.blockedReason, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(.orange)
                     }
+                    if plan.allowsOwnerClose {
+                        Button("Close plan", role: .destructive) { store.planToClose = plan }
+                            .disabled(store.closingPlans.contains(plan.id))
+                            .confirmationDialog("Close this plan?", isPresented: Binding(
+                                get: { store.planToClose?.id == plan.id },
+                                set: { if !$0 && store.planToClose?.id == plan.id { store.planToClose = nil } }
+                            ), titleVisibility: .visible, presenting: store.planToClose) { selected in
+                                Button("Confirm closure", role: .destructive) {
+                                    Task { await store.closePlan(selected) }
+                                }
+                                Button("Cancel", role: .cancel) {}
+                            } message: { selected in
+                                Text(selected.name)
+                            }
+                        if let message = store.closeErrors[plan.id] {
+                            Text(message).font(.caption).foregroundStyle(.red)
+                        }
+                    }
                     if let url = URL(string: plan.link), !plan.link.isEmpty {
                         Link(destination: url) { Label("Open the thread", systemImage: "arrow.up.right.square") }
                     }

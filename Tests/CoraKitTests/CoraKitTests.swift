@@ -68,6 +68,21 @@ import Testing
         #expect(try fixture().openPlans(of: "ag_a").map(\.id) == ["pl-1"])
     }
 
+    @Test func closingRequiresAnOpenPlanWithPermissionAndRevision() throws {
+        func allows(_ status: String, fields: String) throws -> Bool {
+            let json = #"{"id":"p","status":"\#(status)"\#(fields)}"#
+            return try JSONDecoder().decode(Plan.self, from: Data(json.utf8)).allowsOwnerClose
+        }
+        let allowed = #","canClose":true,"revision":2"#
+        #expect(try allows("active", fields: allowed))
+        #expect(try allows("blocked", fields: allowed))
+        #expect(try !allows("completed", fields: allowed))
+        #expect(try !allows("closed", fields: allowed))
+        #expect(try !allows("active", fields: ""))
+        #expect(try !allows("active", fields: #","canClose":true"#))
+        #expect(try !allows("active", fields: #","canClose":false,"revision":2"#))
+    }
+
     @Test func olderServersHaveNoPlans() throws {
         let json = #"{"version":1,"space":{"name":"s","origin":"https://s"},"user":{"id":"u","name":"U","email":"","role":"owner"},"accounts":[],"agents":[]}"#
         let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(json.utf8))

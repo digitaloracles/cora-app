@@ -594,8 +594,10 @@ public struct Plan: Decodable, Sendable, Identifiable, Hashable {
     public var blockedReason: String
     public var updatedAt: Date?
     public var tasks: [Reasoned]
+    public var revision: Int = 0
+    public var canClose: Bool = false
 
-    enum CodingKeys: String, CodingKey { case id, agentId, agentName, color, channelId, threadName, link, name, status, items, done, blockedReason, updatedAt, tasksWithReasoning }
+    enum CodingKeys: String, CodingKey { case id, agentId, agentName, color, channelId, threadName, link, name, status, items, done, blockedReason, updatedAt, tasksWithReasoning, revision, canClose }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -606,6 +608,8 @@ public struct Plan: Decodable, Sendable, Identifiable, Hashable {
             throw DecodingError.dataCorruptedError(forKey: .status, in: c, debugDescription: "Unknown plan status")
         }
         self.status = status
+        revision = c.number(.revision)
+        canClose = c.flag(.canClose)
         items = c.list(.items); done = c.number(.done); blockedReason = c.text(.blockedReason)
         updatedAt = c.instant(.updatedAt); tasks = c.list(.tasksWithReasoning)
     }
@@ -614,6 +618,8 @@ public struct Plan: Decodable, Sendable, Identifiable, Hashable {
         self.id = id; self.agentId = agentId; self.agentName = agentName; self.color = color; self.channelId = channelId; self.threadName = threadName; self.link = link; self.name = name
         self.status = status; self.items = items; self.done = done; self.blockedReason = blockedReason; self.updatedAt = updatedAt; self.tasks = tasks
     }
+
+    public var allowsOwnerClose: Bool { isOpen && canClose && revision > 0 }
 
     public var isOpen: Bool { status == .active || status == .blocked }
     /// 0 to 1, what share of the checklist is done.

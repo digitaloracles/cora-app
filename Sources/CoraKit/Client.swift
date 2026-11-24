@@ -23,7 +23,7 @@ public struct Paired: Decodable, Sendable {
     public struct Device: Decodable, Sendable { public var id: String; public var name: String }
 }
 
-/// Reads one Cora space with a device token. Every call is read-only except signing this device out, its push token and answering an agent's question.
+/// Reads one Cora space with a device token. Every call is read-only except signing this device out, its push token answering an agent's question and closing an authorized plan.
 public struct CoraClient: Sendable {
     public let server: URL
     let token: String
@@ -74,6 +74,19 @@ public struct CoraClient: Sendable {
         var path = "/app/v1/plans?status=\(history ? "history" : "open")&limit=\(limit)"
         if let before, let escaped = before.addingPercentEncoding(withAllowedCharacters: .alphanumerics) { path += "&before=\(escaped)" }
         return try await get(path, as: PlanPage.self)
+    }
+
+    public func closePlan(_ plan: Plan) async throws {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_.:"))
+        guard plan.allowsOwnerClose,
+              let thread = plan.channelId.addingPercentEncoding(withAllowedCharacters: allowed),
+              let id = plan.id.addingPercentEncoding(withAllowedCharacters: allowed)
+        else { throw ClientError.invalidResponse }
+        var call = request("/app/v1/threads/\(thread)/plans/\(id)/close", method: "POST")
+        call.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        call.httpBody = try JSONEncoder().encode(["revision": plan.revision])
+        let (data, response) = try await session.data(for: call)
+        try Self.check(data, response)
     }
 
     /// The reasoning an agent linked to one checklist item.
