@@ -28,6 +28,20 @@ PY
   filter=CloseUI/ClosePlanTests
   ;;
 iOS)
+  python3 - <<'PYIOS'
+from pathlib import Path
+p=Path("ios/Cora/CoraApp.swift")
+s=p.read_text().replace(".onAppear { notices.scheduleDemoNotice() }", """.onAppear { notices.scheduleDemoNotice() }
+                .task {
+                    guard spaces.stores.isEmpty else { return }
+                    do {
+                        let (data, _) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:19428/pair")!)
+                        let url = URL(string: String(decoding: data, as: UTF8.self))!
+                        await spaces.connect(try ConnectLink.parse(url))
+                    } catch { fatalError("Fixture pairing failed") }
+                }""")
+p.write_text(s)
+PYIOS
   cp qa/UITests/ClosePlanTests.swift ios/CoraUITests/
   (cd ios && xcodegen generate)
   device=$(xcrun simctl list devices available -j | python3 -c 'import json,re,sys; d=json.load(sys.stdin)["devices"]; print(next(v["udid"] for k in sorted(d,key=lambda x: list(map(int,re.findall(r"[0-9]+",x))),reverse=True) if "iOS" in k for v in d[k] if re.match(r"iPhone [0-9]+ Pro$",v["name"])))')

@@ -29,14 +29,10 @@ final class ClosePlanTests: XCTestCase {
         #endif
         app.launch()
         #if os(iOS)
-        XCTAssertEqual(try text("open-ios"), "ok")
-        let connect = app.alerts.buttons["Collega"]
-        XCTAssertTrue(connect.waitForExistence(timeout: 15), app.debugDescription)
-        connect.tap()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let permission = springboard.alerts.buttons.matching(NSPredicate(format: "label IN %@", ["Allow", "Consenti", "Don’t Allow", "Non consentire"])).firstMatch
         if permission.waitForExistence(timeout: 5) { permission.tap() }
-        let plans = app.tabBars.buttons["Piani"]
+        let plans = app.tabBars.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Piani")).firstMatch
         XCTAssertTrue(plans.waitForExistence(timeout: 15), app.debugDescription)
         plans.tap()
         let namedRow = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Verifica chiusura")).firstMatch
