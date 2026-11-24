@@ -43,10 +43,16 @@ final class ClosePlanTests: XCTestCase {
         XCTAssertTrue(close.waitForExistence(timeout: 20), app.debugDescription)
         shot("01-piano-aperto")
         close.pressControl()
+        #if os(macOS)
+        let confirm = app.buttons["action-button-1"]
+        let cancel = app.buttons["action-button-2"]
+        #else
         let confirm = app.buttons["Conferma chiusura"].firstMatch
+        let cancel = app.buttons["Annulla"].firstMatch
+        #endif
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), app.debugDescription)
         shot("02-conferma")
-        app.buttons["Annulla"].firstMatch.pressControl()
+        cancel.pressControl()
         XCTAssertEqual(try text("state"), "active/1/2")
         close.pressControl()
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
