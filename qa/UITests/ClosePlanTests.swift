@@ -1,5 +1,15 @@
 import XCTest
 
+private extension XCUIElement {
+    func pressControl() {
+        #if os(macOS)
+        click()
+        #else
+        tap()
+        #endif
+    }
+}
+
 final class ClosePlanTests: XCTestCase {
     private func text(_ path: String) throws -> String {
         try String(contentsOf: URL(string: "http://127.0.0.1:19428/" + path)!, encoding: .utf8)
@@ -36,15 +46,15 @@ final class ClosePlanTests: XCTestCase {
         let close = app.buttons["Chiudi piano"].firstMatch
         XCTAssertTrue(close.waitForExistence(timeout: 20), app.debugDescription)
         shot("01-piano-aperto")
-        close.tap()
+        close.pressControl()
         let confirm = app.buttons["Conferma chiusura"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), app.debugDescription)
         shot("02-conferma")
-        app.buttons["Annulla"].firstMatch.tap()
+        app.buttons["Annulla"].firstMatch.pressControl()
         XCTAssertEqual(try text("state"), "active/1/2")
-        close.tap()
+        close.pressControl()
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        confirm.tap()
+        confirm.pressControl()
         XCTAssertTrue(close.waitForNonExistence(timeout: 15), app.debugDescription)
         XCTAssertEqual(try text("state"), "closed/1/2")
         let status = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] 'Chiuso' OR value CONTAINS[c] 'Chiuso'")).firstMatch
