@@ -1,0 +1,44 @@
+name: PlanMac
+options:
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+packages:
+  CoraApp:
+    path: ..
+targets:
+  MacSubject:
+    type: application
+    platform: macOS
+    sources:
+      - ../Sources/Cora
+      - path: ../Resources
+        excludes: [Info.plist]
+    dependencies:
+      - package: CoraApp
+        product: CoraKit
+    settings:
+      base:
+        PRODUCT_NAME: Cora
+        INFOPLIST_FILE: ../Resources/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: space.usecora.app
+        SWIFT_VERSION: "5.0"
+  CloseUI:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [UITests]
+    dependencies:
+      - target: MacSubject
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: MacSubject
+        PRODUCT_BUNDLE_IDENTIFIER: space.usecora.closeuitest
+schemes:
+  PlanMac:
+    build:
+      targets:
+        MacSubject: all
+        CloseUI: [test]
+    test:
+      targets: [CloseUI]

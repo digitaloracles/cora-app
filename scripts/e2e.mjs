@@ -181,3 +181,16 @@ try {
   await app(["--disconnect"]).catch(() => {});
   await f.close();
 }
+
+// Run the native confirmation journey against disposable plans on both platforms.
+async function runJourney(program, args, env = process.env) {
+  await new Promise((resolve, reject) => {
+    const child = spawn(program, args, { stdio: "inherit", env });
+    child.on("error", reject);
+    child.on("close", (code) => code === 0 ? resolve() : reject(new Error(program + " exited " + code)));
+  });
+}
+await runJourney("brew", ["install", "xcodegen"]);
+for (const platform of ["macOS", "iOS"]) {
+  await runJourney("bash", ["qa/run.sh", platform, join(outPath, platform)]);
+}

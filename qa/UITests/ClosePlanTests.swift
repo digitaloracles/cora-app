@@ -1,0 +1,54 @@
+import XCTest
+
+final class ClosePlanTests: XCTestCase {
+    private func text(_ path: String) throws -> String {
+        try String(contentsOf: URL(string: "http://127.0.0.1:19428/" + path)!, encoding: .utf8)
+    }
+    private func shot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+    func testOwnerClosesConfirmedPlan() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(it)", "-AppleLocale", "it_IT"]
+        #if os(macOS)
+        app.launchEnvironment["CORA_APP_HOME"] = "/tmp/cora-fab-native-test"
+        #endif
+        app.launch()
+        #if os(iOS)
+        XCTAssertEqual(try text("open-ios"), "ok")
+        let connect = app.alerts.buttons["Collega"]
+        XCTAssertTrue(connect.waitForExistence(timeout: 15), app.debugDescription)
+        connect.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let permission = springboard.alerts.buttons.matching(NSPredicate(format: "label IN %@", ["Allow", "Consenti", "Don’t Allow", "Non consentire"])).firstMatch
+        if permission.waitForExistence(timeout: 5) { permission.tap() }
+        let plans = app.tabBars.buttons["Piani"]
+        XCTAssertTrue(plans.waitForExistence(timeout: 15), app.debugDescription)
+        plans.tap()
+        let namedRow = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Verifica chiusura")).firstMatch
+        if namedRow.waitForExistence(timeout: 5) { namedRow.tap() }
+        else { app.staticTexts["Verifica chiusura"].tap() }
+        #endif
+        let close = app.buttons["Chiudi piano"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 20), app.debugDescription)
+        shot("01-piano-aperto")
+        close.tap()
+        let confirm = app.buttons["Conferma chiusura"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), app.debugDescription)
+        shot("02-conferma")
+        app.buttons["Annulla"].firstMatch.tap()
+        XCTAssertEqual(try text("state"), "active/1/2")
+        close.tap()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 15), app.debugDescription)
+        XCTAssertEqual(try text("state"), "closed/1/2")
+        let status = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] 'Chiuso' OR value CONTAINS[c] 'Chiuso'")).firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 8), app.debugDescription)
+        shot("03-piano-chiuso")
+    }
+}
