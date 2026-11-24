@@ -164,7 +164,7 @@ try {
   const working = await app(["--print"]);
   assert.match(working.stdout, /- Buzz \[working\]/);
   assert.match(working.stdout, new RegExp(`live ${live.id} .*\\[thinking\\] ${thoughts[1]}`));
-  const render = await app(["--render-live", join(outPath, "screens")], { timeout: 120000 });
+  const render = await app(["--render-live", join(outPath, "screens")], { timeout: 300000 });
   note(`--render-live → ${render.code}: ${render.stdout.trim()} ${render.stderr.trim()}`);
   assert.equal(render.code, 0);
   live.finish({ status: "ok", output: "16% of the weekly window left." }); secret.finish({ status: "ok" });

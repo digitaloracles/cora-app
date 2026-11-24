@@ -8,6 +8,7 @@ final class PlanSelection: ObservableObject {
     @Published var loadingItems: Set<String> = []
     /// The plan the popover asked to show: the page scrolls to it and outlines it for a moment.
     @Published var focused: String?
+    @Published var query = ""
 }
 
 /// The window's Plans page: every plan in progress with its checklist, then the history of finished ones.
@@ -31,14 +32,16 @@ struct PlansPage: View {
 
     func reveal(_ reader: ScrollViewProxy) {
         guard let id = plans.focused else { return }
+        plans.query = ""
         if !(snapshot.plans?.open.contains { $0.id == id } ?? false) { plans.openPlans.insert(id) }
         DispatchQueue.main.async { withAnimation(.easeOut(duration: 0.25)) { reader.scrollTo(id, anchor: .top) } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { if plans.focused == id { withAnimation { plans.focused = nil } } }
     }
 
     var content: some View {
-        let open = snapshot.plans?.open ?? []
-        let history = store.planHistory
+        let searching = !plans.query.trimmingCharacters(in: .whitespaces).isEmpty
+        let open = Plan.matching(snapshot.plans?.open ?? [], plans.query)
+        let history = Plan.matching(store.planHistory, plans.query)
         return VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Plans").font(.system(size: 20, weight: .semibold))
@@ -47,20 +50,23 @@ struct PlansPage: View {
                     Text("\(open.count) in progress · \(history.count) finished").font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
                 }
             }
+            if snapshot.plans != nil {
+                SearchField(query: $plans.query, prompt: String(localized: "Search plans")).frame(maxWidth: 360)
+            }
             if snapshot.plans == nil {
                 Text("This space does not list plans yet: its Cora server needs an update.").font(.system(size: 12)).foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("In progress").font(.system(size: 13, weight: .semibold))
                     if open.isEmpty {
-                        Text("No plan in progress.").font(.system(size: 12)).foregroundStyle(.secondary)
+                        Text(searching ? "No plan in progress matches your search." : "No plan in progress.").font(.system(size: 12)).foregroundStyle(.secondary)
                     }
                     ForEach(open) { plan in PlanCard(store: store, plans: plans, plan: plan).id(plan.id) }
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     Text("History").font(.system(size: 13, weight: .semibold))
                     if history.isEmpty {
-                        Text("No finished plans yet.").font(.system(size: 12)).foregroundStyle(.secondary)
+                        Text(searching ? "No finished plan matches your search." : "No finished plans yet.").font(.system(size: 12)).foregroundStyle(.secondary)
                     } else {
                         VStack(spacing: 0) {
                             ForEach(Array(history.enumerated()), id: \.element.id) { index, plan in

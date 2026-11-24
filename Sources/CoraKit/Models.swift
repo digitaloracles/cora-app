@@ -635,6 +635,18 @@ public struct Plan: Decodable, Sendable, Identifiable, Hashable {
     }
 }
 
+extension Plan {
+    /// Every word of the query must appear in the plan's name, its agent, its thread, its checklist or its blocker.
+    public static func matching(_ list: [Plan], _ query: String) -> [Plan] {
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !words.isEmpty else { return list }
+        return list.filter { plan in
+            let text = ([plan.name, plan.agentName, plan.threadName, plan.blockedReason] + plan.items.map(\.text)).joined(separator: " ")
+            return words.allSatisfy { text.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        }
+    }
+}
+
 /// The snapshot's plans: every open one, the latest finished ones and the cursor for older history.
 public struct PlanBoard: Decodable, Sendable, Hashable {
     public var open: [Plan]
