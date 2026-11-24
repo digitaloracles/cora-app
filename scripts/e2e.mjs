@@ -192,7 +192,7 @@ async function runJourney(program, args, env = process.env) {
 }
 await runJourney("brew", ["install", "xcodegen"]);
 const failures = [];
-for (const platform of ["macOS"]) {
+for (const platform of ["macOS", "iOS"]) {
   try { await runJourney("bash", ["qa/run.sh", platform, join(outPath, platform)]); }
   catch (error) { failures.push(platform + ": " + error.message); }
 }

@@ -59,8 +59,16 @@ final class ClosePlanTests: XCTestCase {
         confirm.pressControl()
         XCTAssertTrue(close.waitForNonExistence(timeout: 15), app.debugDescription)
         XCTAssertEqual(try text("state"), "closed/1/2")
+        shot("03-piano-chiuso")
+        #if os(macOS)
+        // Scroll bars and progress indicators carry numeric values: a substring predicate over every element raises inside the app.
+        let status = app.staticTexts.matching(NSPredicate(format: "value CONTAINS[c] 'Chiuso' OR label CONTAINS[c] 'Chiuso'")).firstMatch
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Chiuso' OR title CONTAINS[c] 'Chiuso'")).firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 8) || row.exists, app.debugDescription)
+        #else
         let status = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] 'Chiuso' OR value CONTAINS[c] 'Chiuso'")).firstMatch
         XCTAssertTrue(status.waitForExistence(timeout: 8), app.debugDescription)
-        shot("03-piano-chiuso")
+        #endif
+        shot("04-storico")
     }
 }
