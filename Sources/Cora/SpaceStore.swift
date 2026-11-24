@@ -35,6 +35,25 @@ final class SpaceStore: ObservableObject {
     @Published private(set) var lastAnswer: (agentName: String, answer: String)?
     @Published var choiceError: String?
 
+    @Published var planToClose: Plan?
+    @Published private(set) var closingPlans: Set<String> = []
+    @Published private(set) var closeErrors: [String: String] = [:]
+
+    func closePlan(_ plan: Plan) async {
+        guard let client, closingPlans.insert(plan.id).inserted else { return }
+        defer { closingPlans.remove(plan.id) }
+        closeErrors[plan.id] = nil
+        do {
+            try await client.closePlan(plan)
+        } catch ClientError.unauthorized(let message) {
+            revoked(message)
+            return
+        } catch {
+            closeErrors[plan.id] = error.localizedDescription
+        }
+        await refresh()
+    }
+
     private(set) var client: CoraClient?
     private var streamTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
@@ -134,7 +153,7 @@ final class SpaceStore: ObservableObject {
             NSApp.activate(ignoringOtherApps: true)
             let alert = NSAlert()
             alert.messageText = String(localized: "Connect this Mac to \(link.server.host ?? "")?")
-            alert.informativeText = String(localized: "The app will read the agents, quotas and live work you see in that space. It cannot change anything.")
+            alert.informativeText = String(localized: "You can follow work, answer questions and close plans you manage.")
             alert.addButton(withTitle: String(localized: "Connect"))
             alert.addButton(withTitle: String(localized: "Cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { return }

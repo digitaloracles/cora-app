@@ -60,7 +60,7 @@ struct RootView: View {
             Button("Connect") { if let link = spaces.unrequested { Task { await spaces.connect(link) } } }
             Button("Cancel", role: .cancel) { spaces.unrequested = nil }
         } message: {
-            Text("The app will read the agents, quotas and live work you see in that space. It cannot change anything.")
+            Text("You can follow work, answer questions and close plans you manage.")
         }
     }
 

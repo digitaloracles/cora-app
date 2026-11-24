@@ -36,6 +36,25 @@ final class SpaceStore: ObservableObject, Identifiable {
     @Published private(set) var lastAnswer: (agentName: String, answer: String)?
     @Published var choiceError: String?
 
+    @Published var planToClose: Plan?
+    @Published private(set) var closingPlans: Set<String> = []
+    @Published private(set) var closeErrors: [String: String] = [:]
+
+    func closePlan(_ plan: Plan) async {
+        guard let client, closingPlans.insert(plan.id).inserted else { return }
+        defer { closingPlans.remove(plan.id) }
+        closeErrors[plan.id] = nil
+        do {
+            try await client.closePlan(plan)
+        } catch ClientError.unauthorized(let message) {
+            revoke(message)
+            return
+        } catch {
+            closeErrors[plan.id] = error.localizedDescription
+        }
+        await refresh()
+    }
+
     private(set) var client: CoraClient?
     private var streamTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
