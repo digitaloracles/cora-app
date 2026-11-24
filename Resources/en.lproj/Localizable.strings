@@ -6,3 +6,10 @@
 "Search plans" = "Search plans";
 "No plan in progress matches your search." = "No plan in progress matches your search.";
 "No finished plan matches your search." = "No finished plan matches your search.";
+"Unlock" = "Unlock";
+"macOS will ask you to unlock your Keychain." = "macOS will ask you to unlock your Keychain.";
+"Checking Keychain…" = "Checking Keychain…";
+"Unlocking…" = "Unlocking…";
+"Retry" = "Retry";
+"Unlock the Keychain" = "Unlock the Keychain";
+"Keychain" = "Keychain";

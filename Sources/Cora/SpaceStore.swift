@@ -1,11 +1,12 @@
 import AppKit
 import CoraKit
 import Foundation
+import Security
 
 /// The connected space as the app shows it: the last snapshot, the live steps from the event stream, the connection state.
 @MainActor
 final class SpaceStore: ObservableObject {
-    enum Phase: Equatable { case disconnected, waitingForPanel(String), connecting, ready, failed(String) }
+    enum Phase: Equatable { case checkingKeychain, locked, unlocking, keychainError(String), disconnected, waitingForPanel(String), connecting, ready, failed(String) }
 
     @Published private(set) var connection: Connection?
     @Published private(set) var snapshot: Snapshot?
@@ -59,7 +60,6 @@ final class SpaceStore: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var pendingRefresh: Task<Void, Never>?
     private var keychainTask: Task<Void, Never>?
-    private var keychainAttempt: UUID?
     private let maxSteps = 300
     /// Told when this Mac is paired with a space, and when the person disconnects it, so the list of spaces follows.
     var onConnected: (SpaceStore) -> Void = { _ in }
@@ -68,6 +68,7 @@ final class SpaceStore: ObservableObject {
     /// One space of the list, read from the Keychain on `start`.
     init(connection: Connection) {
         self.connection = connection
+        phase = .checkingKeychain
         spaceInput = connection.host
     }
 
@@ -78,31 +79,78 @@ final class SpaceStore: ObservableObject {
             snapshot = preview
             phase = .ready
             connection = Connection(server: URL(string: preview.space.origin) ?? URL(string: "https://example.usecora.space")!, spaceName: preview.space.name, userName: preview.user.name, email: preview.user.email, deviceId: "preview")
+        } else {
+            _ = checkKeychain()
         }
     }
 
     /// Reads the token off the main thread: a Keychain that does not answer (lid closed, locked session) must not freeze the app.
     func start() {
+        keychainTask?.cancel()
+        guard checkKeychain() else { return }
         guard let connection else { phase = .disconnected; return }
-        if snapshot == nil { phase = .connecting }
-        let attempt = UUID()
-        keychainAttempt = attempt
-        let slow = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 8_000_000_000)
-            guard let self, !Task.isCancelled, self.keychainAttempt == attempt, self.client == nil else { return }
-            self.phase = .failed(String(localized: "Waiting for the Keychain: unlock your Mac to read this space."))
-        }
+        if snapshot == nil { phase = .checkingKeychain }
         keychainTask = Task { [weak self] in
-            let token = await Task.detached(priority: .userInitiated) { Storage.token(for: connection) }.value
-            slow.cancel()
-            guard let self, self.keychainAttempt == attempt, self.connection?.server == connection.server else { return }
-            guard let token else {
-                // A Keychain that is not readable yet (wake, first unlock) keeps the pairing and tries again later.
-                self.phase = .failed(String(localized: "The Keychain is locked: unlock your Mac to read this space."))
-                Task { try? await Task.sleep(nanoseconds: 30_000_000_000); if self.client == nil, self.connection != nil, self.keychainAttempt == attempt { self.start() } }
-                return
+            let result = await Task.detached(priority: .userInitiated) {
+                Result { try Storage.readToken(for: connection) }
+            }.value
+            guard let self, !Task.isCancelled else { return }
+            switch result {
+            case .success(let token?):
+                self.attach(connection, token: token)
+            case .success(nil):
+                if self.checkKeychain() { self.phase = .disconnected }
+            case .failure(Keychain.Failure.status(let code)) where [errSecUserCanceled, errSecInteractionNotAllowed, errSecAuthFailed].contains(code):
+                self.phase = .locked
+            case .failure(let error):
+                self.keychainFailure(error)
             }
-            self.attach(self.connection ?? connection, token: token)
+        }
+    }
+
+    private func keychainFailure(_ error: Error) {
+        if case Keychain.Failure.status(let code) = error {
+            phase = .keychainError(SecCopyErrorMessageString(code, nil) as String? ?? String(code))
+        } else {
+            phase = .keychainError(error.localizedDescription)
+        }
+    }
+
+    private func checkKeychain() -> Bool {
+        do {
+            guard try Keychain.isUnlocked() else { phase = .locked; return false }
+            return true
+        } catch {
+            keychainFailure(error)
+            return false
+        }
+    }
+
+    func refreshPairingGate() {
+        switch phase {
+        case .disconnected, .failed, .waitingForPanel:
+            _ = checkKeychain()
+        default: break
+        }
+    }
+
+    func unlock() {
+        guard phase == .locked else { return }
+        phase = .unlocking
+        NSApp.activate(ignoringOtherApps: true)
+        keychainTask = Task {
+            do {
+                try await Task.detached(priority: .userInitiated) { try Keychain.requestUnlock() }.value
+                guard !Task.isCancelled else { return }
+                start()
+            } catch {
+                guard !Task.isCancelled else { return }
+                if case Keychain.Failure.status(let code) = error, [errSecUserCanceled, errSecAuthFailed, errSecInteractionNotAllowed].contains(code) {
+                    phase = .locked
+                } else {
+                    keychainFailure(error)
+                }
+            }
         }
     }
 
@@ -131,6 +179,11 @@ final class SpaceStore: ObservableObject {
 
     /// Sends the person to the panel of the space, signed in there, to authorize this Mac.
     func authorize() {
+        switch phase {
+        case .disconnected, .failed, .waitingForPanel: break
+        default: return
+        }
+        guard checkKeychain() else { return }
         guard let origin = Space.origin(spaceInput) else {
             phase = .failed(String(localized: "Write the address of your space, for example yourspace.usecora.space."))
             return
@@ -148,6 +201,9 @@ final class SpaceStore: ObservableObject {
             phase = .failed(String(localized: "This link does not come from a Cora panel."))
             return
         }
+        guard phase != .unlocking, checkKeychain() else { return }
+        if phase == .locked { return }
+        keychainTask?.cancel()
         let expected = Storage.takePendingState()
         if link.state == nil || link.state != expected {
             NSApp.activate(ignoringOtherApps: true)
@@ -162,6 +218,7 @@ final class SpaceStore: ObservableObject {
     }
 
     func connect(_ link: ConnectLink) async {
+        guard checkKeychain() else { return }
         phase = .connecting
         do {
             let paired = try await CoraClient.exchange(link, deviceName: Host.current().localizedName ?? "Mac", platform: "macOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion)")
@@ -189,6 +246,7 @@ final class SpaceStore: ObservableObject {
 
     /// Stops reading the space, as when it leaves the list.
     func stop() {
+        keychainTask?.cancel()
         streamTask?.cancel(); pollTask?.cancel(); pendingRefresh?.cancel()
         client = nil; streamOnline = false
     }

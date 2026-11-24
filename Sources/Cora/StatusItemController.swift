@@ -33,6 +33,7 @@ final class StatusItemController: NSObject {
         guard let button = item.button else { return }
         if popover.isShown { popover.performClose(nil); return }
         let store = spaces.current
+        store.refreshPairingGate()
         Task { if let at = store.refreshedAt, Date().timeIntervalSince(at) > 30 { await store.refresh() } }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()

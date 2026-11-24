@@ -244,16 +244,48 @@ struct ConnectPanel: View {
     /// Set while adding one more space: goes back to the spaces already connected.
     var cancel: (() -> Void)? = nil
 
+    private var title: LocalizedStringKey {
+        switch store.phase {
+        case .locked, .unlocking: return "Unlock the Keychain"
+        case .checkingKeychain, .keychainError: return "Keychain"
+        default: return cancel == nil ? "Connect your space" : "Add another space"
+        }
+    }
+
+    private var needsAddress: Bool {
+        switch store.phase {
+        case .disconnected, .failed, .waitingForPanel: return true
+        default: return false
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(cancel == nil ? LocalizedStringKey("Connect your space") : LocalizedStringKey("Add another space")).font(.system(size: 13, weight: .semibold))
-            Text("The panel opens in your browser. Sign in there and authorize this Mac: Cora comes back here on its own.")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            TextField(String(localized: "Space address"), text: $store.spaceInput, prompt: Text(verbatim: "yourspace.usecora.space"))
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { store.authorize() }
+            Text(title).font(.system(size: 13, weight: .semibold))
+            if needsAddress {
+                Text("The panel opens in your browser. Sign in there and authorize this Mac: Cora comes back here on its own.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                TextField(String(localized: "Space address"), text: $store.spaceInput, prompt: Text(verbatim: "yourspace.usecora.space"))
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { store.authorize() }
+            } else if store.phase == .locked || store.phase == .unlocking {
+                Label("macOS will ask you to unlock your Keychain.", systemImage: "lock")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
             HStack {
-                Button(String(localized: "Connect")) { store.authorize() }.buttonStyle(.borderedProminent).controlSize(.small)
+                switch store.phase {
+                case .locked:
+                    Button(String(localized: "Unlock")) { store.unlock() }.buttonStyle(.borderedProminent).controlSize(.small)
+                case .unlocking, .checkingKeychain:
+                    ProgressView().controlSize(.small)
+                    Text(store.phase == .unlocking ? LocalizedStringKey("Unlocking…") : LocalizedStringKey("Checking Keychain…")).font(.system(size: 11))
+                case .keychainError:
+                    Button(String(localized: "Retry")) { store.start() }.controlSize(.small)
+                default:
+                    if needsAddress {
+                        Button(String(localized: "Connect")) { store.authorize() }.buttonStyle(.borderedProminent).controlSize(.small)
+                    }
+                }
                 if let cancel { Button(String(localized: "Cancel"), action: cancel).controlSize(.small) }
                 switch store.phase {
                 case .waitingForPanel(let host):
@@ -268,8 +300,15 @@ struct ConnectPanel: View {
             if case .failed(let message) = store.phase {
                 Label(message, systemImage: "exclamationmark.triangle").font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            Text("You can follow work, answer questions and close plans you manage.").font(.system(size: 10)).foregroundStyle(.tertiary)
+            if case .keychainError(let message) = store.phase {
+                Label(message, systemImage: "exclamationmark.triangle").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            if needsAddress {
+                Text("You can follow work, answer questions and close plans you manage.").font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear { store.refreshPairingGate() }
     }
 }
 
