@@ -374,10 +374,21 @@ if let web = webArea(), let flash = find(web, limit: 20000, { string($0, kAXRole
 } else {
     log("DeepSeek V4.1 Flash is already the chosen model")
 }
-reveal(webButton("Salva"), "Salva")
+// The panel's floating "Chat con Lia" button can sit over the save bar: Save is pressed as an accessibility action.
+let save = webButton("Salva")
+AXUIElementPerformAction(save, "AXScrollToVisible" as CFString)
+pause(0.8)
+log("press Salva")
+AXUIElementPerformAction(save, kAXPressAction as CFString)
 pause(2.5)
 shot("brain-saved")
-let agentModel = run("/Applications/Cora.app/Contents/MacOS/cora-node", ["--no-warnings", "-e", "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});process.stdout.write(JSON.stringify(db.prepare(\"select json_extract(data,'$.name') name, json_extract(data,'$.model') model, json_extract(data,'$.credentialId') credential from agents\").all()))", NSHomeDirectory() + "/Library/Application Support/Cora/Local/home/cora.db"]).1
+let agentsQuery = "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});process.stdout.write(JSON.stringify(db.prepare(\"select json_extract(data,'$.name') name, json_extract(data,'$.model') model, json_extract(data,'$.credentialId') credential from agents\").all()))"
+var agentModel = ""
+for _ in 0..<10 {
+    agentModel = run("/Applications/Cora.app/Contents/MacOS/cora-node", ["--no-warnings", "-e", agentsQuery, NSHomeDirectory() + "/Library/Application Support/Cora/Local/home/cora.db"]).1
+    if agentModel.contains("deepseek") { break }
+    pause(1)
+}
 log("agents in the space's database: \(agentModel)")
 guard agentModel.contains("deepseek") else { fail("the agent did not take DeepSeek from its Brain tab") }
 
