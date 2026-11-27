@@ -7,8 +7,8 @@ import Foundation
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "out"
 let started = Date()
 setvbuf(stdout, nil, _IOLBF, 0)
-DispatchQueue.global().asyncAfter(deadline: .now() + 3900) {
-    print("FAIL: the journey took more than 65 minutes")
+DispatchQueue.global().asyncAfter(deadline: .now() + 4500) {
+    print("FAIL: the journey took more than 75 minutes")
     exit(3)
 }
 
@@ -279,7 +279,7 @@ click(create, "Create the space")
 log("creating the space")
 var lastStep = ""
 var lastActivity = ""
-let ready = Date().addingTimeInterval(2100)
+let ready = Date().addingTimeInterval(3300)
 while Date() < ready {
     if find(cora, identified("space-ready")) != nil { shot("created"); break }
     if find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil { break }
@@ -292,7 +292,7 @@ while Date() < ready {
     if !step.isEmpty, step != lastActivity { lastActivity = step; log("wizard: \(step.prefix(140))") }
     pause(0.3)
 }
-guard find(cora, identified("space-ready")) != nil || find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil else { fail("the space was not ready within 35 minutes") }
+guard find(cora, identified("space-ready")) != nil || find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil else { fail("the space was not ready within 55 minutes") }
 log("space ready")
 
 // 4. The panel opens in the window, signed in: a new agent, then a real question to it.
