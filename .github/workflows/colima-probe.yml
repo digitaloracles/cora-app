@@ -4,36 +4,36 @@ on:
     branches: ["buzz/not120-colima-probe"]
 jobs:
   probe:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15, macos-15-intel, macos-26]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    runs-on: macos-15-intel
+    timeout-minutes: 45
     steps:
-      - name: Machine
-        run: |
-          sw_vers; uname -m; sysctl -n machdep.cpu.brand_string; sysctl kern.hv_support || true; sysctl -n hw.memsize; sysctl -n hw.ncpu
+      - uses: actions/checkout@v4
+        with:
+          repository: digitaloracles/cora
+          path: cora
       - name: Tools
         run: |
-          A=$(uname -m); L=$([ "$A" = arm64 ] && echo arm64 || echo x86_64); D=$([ "$A" = arm64 ] && echo aarch64 || echo x86_64)
           mkdir -p $HOME/t/bin && cd $HOME/t
-          curl -fsSL -o bin/colima https://github.com/abiosoft/colima/releases/download/v0.10.3/colima-Darwin-$L && chmod +x bin/colima
-          curl -fsSL https://github.com/lima-vm/lima/releases/download/v2.3.0/lima-2.3.0-Darwin-$L.tar.gz | tar -xz
-          curl -fsSL https://download.docker.com/mac/static/stable/$D/docker-29.10.1.tgz | tar -xz --strip-components 1 -C bin docker/docker
-          ls bin share/lima | head -30
-      - name: Colima vz
+          curl -fsSL -o bin/colima https://github.com/abiosoft/colima/releases/download/v0.10.3/colima-Darwin-x86_64 && chmod +x bin/colima
+          curl -fsSL https://github.com/lima-vm/lima/releases/download/v2.3.0/lima-2.3.0-Darwin-x86_64.tar.gz | tar -xz
+          curl -fsSL https://download.docker.com/mac/static/stable/x86_64/docker-29.10.1.tgz | tar -xz --strip-components 1 -C bin docker/docker
+      - name: VM
         run: |
-          export PATH=$HOME/t/bin:$PATH COLIMA_HOME=$HOME/.cora-local/colima
-          time colima start cora --vm-type vz --cpu 2 --memory 4 --disk 30 --runtime docker 2>&1 | tail -30 || echo VZ_FAILED
-          export DOCKER_HOST=unix://$COLIMA_HOME/cora/docker.sock
-          docker info --format '{{.ServerVersion}} {{.Architecture}}' && time docker run --rm -p 127.0.0.1:18080:80 -d --name web nginx:alpine && sleep 3 && curl -sS -o /dev/null -w 'host->container %{http_code}\n' http://127.0.0.1:18080 || true
-          colima stop cora || true
-      - name: Colima qemu
-        if: always()
+          export PATH=$HOME/t/bin:/usr/bin:/bin:/usr/sbin:/sbin COLIMA_HOME=$HOME/.cora-local/colima LIMA_HOME=$HOME/.cora-local/lima DOCKER_CONFIG=$HOME/.cora-local/docker
+          time colima start cora --vm-type vz --cpu 2 --memory 6 --disk 40 --runtime docker --activate=false 2>&1 | tail -5
+          colima status cora --json; ls -la $HOME/.cora-local/colima $HOME/.cora-local/colima/cora || true; cat ~/.docker/config.json 2>/dev/null || echo "no ~/.docker/config.json"
+          time colima start cora --activate=false 2>&1 | tail -3; echo "second start exit $?"
+      - name: Box
         run: |
-          brew install qemu >/dev/null 2>&1 || true
-          export PATH=$HOME/t/bin:$PATH COLIMA_HOME=$HOME/.cora-local/colima2
-          time colima start q --vm-type qemu --cpu 2 --memory 4 --disk 30 --runtime docker 2>&1 | tail -30 || echo QEMU_FAILED
-          export DOCKER_HOST=unix://$COLIMA_HOME/q/docker.sock
-          docker info --format '{{.ServerVersion}} {{.Architecture}}' && time docker run --rm alpine uname -a || true
+          export PATH=$HOME/t/bin:/usr/bin:/bin:/usr/sbin:/sbin COLIMA_HOME=$HOME/.cora-local/colima LIMA_HOME=$HOME/.cora-local/lima DOCKER_CONFIG=$HOME/.cora-local/docker
+          export DOCKER_HOST="unix://$(colima status cora --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["docker_socket"].replace("unix://",""))')"
+          echo "DOCKER_HOST=$DOCKER_HOST"
+          docker info --format '{{.ServerVersion}} {{.Architecture}} {{.NCPU}} {{.MemTotal}}'
+          time docker build -q -t cora-box:latest cora/box
+          docker network create cora-desktops >/dev/null
+          time docker run -d --name cora-box-probe --network cora-desktops --memory 2g -p 127.0.0.1::6080 cora-box:latest
+          sleep 20; docker port cora-box-probe
+          P=$(docker port cora-box-probe 6080 | head -1 | cut -d: -f2)
+          for i in $(seq 1 20); do curl -fsS -o /dev/null -w "novnc from the Mac %{http_code}\n" http://127.0.0.1:$P/ && break; sleep 3; done
+          docker exec -u agent cora-box-probe sh -c 'uname -a; cat /etc/debian_version; whoami; chromium --version'
+          docker images cora-box --format '{{.Size}}'
