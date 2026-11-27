@@ -279,11 +279,35 @@ guard find(cora, identified("space-ready")) != nil || find(cora, { string($0, kA
 log("space ready")
 
 // 4. The panel opens in the window, signed in, on the first agent's chat: a real question to a real agent.
-let web = wait("the panel in the window", timeout: 60) { find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) }
-let box = wait("the chat box of the agent", timeout: 60) { find(web, { string($0, kAXRoleAttribute) == "AXTextArea" && (frame($0)?.width ?? 0) > 100 }) }
-pause(1.5)
+func webArea() -> AXUIElement? { find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) }
+func composer(_ web: AXUIElement) -> AXUIElement? {
+    find(web, limit: 20000) { element in
+        let role = string(element, kAXRoleAttribute)
+        guard ["AXTextArea", "AXTextField"].contains(role), (frame(element)?.width ?? 0) > 100 else { return false }
+        let hint = [string(element, "AXPlaceholderValue"), string(element, kAXDescriptionAttribute), string(element, kAXTitleAttribute)].joined(separator: " ")
+        return role == "AXTextArea" || hint.contains("Scrivi")
+    }
+}
+_ = wait("the panel in the window", timeout: 60) { webArea() }
+pause(3)
+var box: AXUIElement?
+let looking = Date().addingTimeInterval(30)
+while Date() < looking, box == nil {
+    if let web = webArea() { box = composer(web) }
+    if box == nil { pause(1) }
+}
 shot("panel")
-click(box, "chat box")
+if let box {
+    click(box, "chat box")
+} else if let web = webArea(), let rect = frame(web) {
+    var roles: [String: Int] = [:]
+    var queue = [web], seen = 0
+    while !queue.isEmpty && seen < 3000 { let e = queue.removeFirst(); seen += 1; roles[string(e, kAXRoleAttribute), default: 0] += 1; queue.append(contentsOf: children(e)) }
+    log("composer not found by accessibility; web area \(rect) roles \(roles)")
+    click(CGPoint(x: rect.maxX - rect.width * 0.35, y: rect.maxY - 22))
+} else {
+    fail("no panel in the window")
+}
 type(question)
 pause(0.5)
 press(36)

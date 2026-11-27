@@ -34,6 +34,8 @@ jobs:
           killall cfprefsd || true
           killall Finder Dock SystemUIServer CoreServicesUIAgent || true
           sleep 3
+      - name: Screen recorder
+        run: brew install ffmpeg >/dev/null && ffmpeg -version | head -1
       - name: Install, create the space and talk to its agent
         env:
           E2E_KEY: ${{ secrets.E2E_DEEPSEEK_API_KEY }}
@@ -42,9 +44,12 @@ jobs:
           swiftc -O scripts/e2e-video/drive.swift -o "$RUNNER_TEMP/drive"
           xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" dmg/Cora.dmg
           hdiutil attach dmg/Cora.dmg
-          # screencapture stops and writes the movie when a key arrives on its input.
+          # ffmpeg records the screen and writes the movie when it reads q on its input.
+          DEV="$(ffmpeg -hide_banner -f avfoundation -list_devices true -i "" 2>&1 | sed -nE 's/.*\[([0-9]+)\] Capture screen 0.*/\1/p' | head -1)"
+          echo "screen device: $DEV"
           mkfifo "$RUNNER_TEMP/stop"
-          screencapture -v -C -V 870 -x out/e2e.mov < "$RUNNER_TEMP/stop" &
+          ffmpeg -hide_banner -nostats -loglevel warning -f avfoundation -capture_cursor 1 -capture_mouse_clicks 1 -framerate 30 -i "${DEV}:none" \
+            -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p out/e2e.mp4 < "$RUNNER_TEMP/stop" > out/ffmpeg.log 2>&1 &
           REC=$!
           exec 3> "$RUNNER_TEMP/stop"
           sleep 2
@@ -55,7 +60,7 @@ jobs:
           echo q >&3 || true
           exec 3>&-
           for _ in $(seq 1 60); do kill -0 $REC 2>/dev/null || break; sleep 1; done
-          if kill -0 $REC 2>/dev/null; then echo "screencapture still running"; else echo "recording saved"; fi
+          if kill -0 $REC 2>/dev/null; then echo "recorder still running"; kill -INT $REC; sleep 5; else echo "recording saved"; fi
           tail -n 80 "$HOME/Library/Application Support/Cora/Local/cora.log" > out/server-tail.log 2>/dev/null || true
           ls -la out
           exit $CODE
