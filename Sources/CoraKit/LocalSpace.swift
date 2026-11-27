@@ -126,14 +126,23 @@ public struct LocalSpace: Sendable {
     }
 
     /// What the server reads besides the secrets: where it lives, where it listens, where the agents' harness is.
-    public func serverEnvironment(tools: URL? = nil) -> [String: String] {
+    /// The server's PATH: the app's own Node, the harness and the VM tools first, then the person's login shell PATH
+    /// (Homebrew, ~/.local/bin and the like, where Claude Code, Codex and the other CLIs already are), then the system.
+    public func serverPath(tools: URL? = nil, userPath: [String] = []) -> String {
+        let system = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+        var dirs = [bin.path, harness.appendingPathComponent("bin").path] + (tools.map { [$0.path] } ?? [])
+        for dir in userPath + system where dir.hasPrefix("/") && !dirs.contains(dir) { dirs.append(dir) }
+        return dirs.joined(separator: ":")
+    }
+
+    public func serverEnvironment(tools: URL? = nil, userPath: [String] = []) -> [String: String] {
         var values = [
             "CORA_HOME": home.path,
             "CORA_LISTEN_HOST": "127.0.0.1",
             "PORT": String(LocalSpace.port),
             "CORA_DSH_BIN": dsh.path,
             "CORA_INSECURE_COOKIES": "1",
-            "PATH": ([bin.path, harness.appendingPathComponent("bin").path] + (tools.map { [$0.path] } ?? []) + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]).joined(separator: ":"),
+            "PATH": serverPath(tools: tools, userPath: userPath),
         ]
         // The agents' computers: containers in the VM, reached with the app's Docker client on the VM's socket.
         if let tools {
@@ -147,11 +156,11 @@ public struct LocalSpace: Sendable {
     }
 
     /// The LaunchAgent: started at login, restarted if it stops, logs in the space's folder.
-    public func launchAgent(node: URL, main: URL, tools: URL? = nil) throws -> Data {
+    public func launchAgent(node: URL, main: URL, tools: URL? = nil, userPath: [String] = []) throws -> Data {
         let plist: [String: Any] = [
             "Label": LocalSpace.label,
             "ProgramArguments": ["/bin/sh", "-c", "set -a; . \"$0\"; set +a; exec \"$1\" --disable-warning=ExperimentalWarning \"$2\"", envFile.path, node.path, main.path],
-            "EnvironmentVariables": serverEnvironment(tools: tools),
+            "EnvironmentVariables": serverEnvironment(tools: tools, userPath: userPath),
             "WorkingDirectory": root.path,
             "RunAtLoad": true,
             "KeepAlive": true,
