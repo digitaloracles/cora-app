@@ -358,13 +358,18 @@ shot("brain-key")
 func webButton(_ text: String) -> AXUIElement {
     wait("the button \(text)", timeout: 20) { () -> AXUIElement? in
         guard let web = webArea() else { return nil }
-        return find(web, limit: 20000) { string($0, kAXRoleAttribute) == "AXButton" && label($0).contains(text) }
+        return find(web, limit: 20000) { string($0, kAXRoleAttribute) == "AXButton" && label($0, depth: 4).contains(text) }
     }
 }
 reveal(webButton("Aggiungi la tua chiave"), "Aggiungi la tua chiave")
 pause(2.5)
-reveal(webButton("DeepSeek V4.1 Flash"), "DeepSeek V4.1 Flash")
-pause(1)
+// DeepSeek V4.1 Flash comes already chosen with the key; a click keeps it.
+if let web = webArea(), let flash = find(web, limit: 20000, { string($0, kAXRoleAttribute) == "AXButton" && label($0, depth: 5).contains("V4.1 Flash") }) {
+    reveal(flash, "DeepSeek V4.1 Flash")
+    pause(1)
+} else {
+    log("DeepSeek V4.1 Flash is already the chosen model")
+}
 reveal(webButton("Salva"), "Salva")
 pause(2.5)
 shot("brain-saved")
