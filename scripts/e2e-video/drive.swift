@@ -201,10 +201,17 @@ func label(_ element: AXUIElement, depth: Int = 2) -> String {
     return parts.filter { !$0.isEmpty }.joined(separator: " ")
 }
 
-/// Scrolls the panel until the element is on screen, then clicks it like a person.
+/// Scrolls the panel until the element is on screen, then clicks it like a person. Scrolled into view it can land in
+/// the window's bottom-right corner, under the panel's floating chat button: there it is pressed as an accessibility action.
 func reveal(_ element: AXUIElement, _ name: String) {
     AXUIElementPerformAction(element, "AXScrollToVisible" as CFString)
     pause(0.8)
+    if let rect = frame(element), let window = value(element, kAXWindowAttribute).map({ $0 as! AXUIElement }), let bounds = frame(window),
+       rect.maxY > bounds.maxY - 90, rect.maxX > bounds.maxX - 300 {
+        log("press \(name) (under the chat button at \(Int(rect.midX)),\(Int(rect.midY)))")
+        AXUIElementPerformAction(element, kAXPressAction as CFString)
+        return
+    }
     click(element, name)
 }
 
@@ -280,9 +287,10 @@ log("creating the space")
 var lastStep = ""
 var lastActivity = ""
 let ready = Date().addingTimeInterval(3300)
+var spaceReady = false
 while Date() < ready {
-    if find(cora, identified("space-ready")) != nil { shot("created"); break }
-    if find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil { break }
+    if find(cora, identified("space-ready")) != nil { shot("created"); spaceReady = true; break }
+    if find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil { spaceReady = true; break }
     if let again = find(cora, identified("create-space")), [string(again, kAXTitleAttribute), string(again, kAXDescriptionAttribute)].contains(where: { $0 == "Riprova" || $0 == "Try again" }) {
         fail("a step of the creation failed")
     }
@@ -292,7 +300,8 @@ while Date() < ready {
     if !step.isEmpty, step != lastActivity { lastActivity = step; log("wizard: \(step.prefix(140))") }
     pause(0.3)
 }
-guard find(cora, identified("space-ready")) != nil || find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil else { fail("the space was not ready within 55 minutes") }
+// Seen once is enough: the window swaps the wizard for the panel right then, and a second look can fall in between.
+guard spaceReady else { fail("the space was not ready within 55 minutes") }
 log("space ready")
 
 // 4. The panel opens in the window, signed in: a new agent, then a real question to it.
@@ -374,10 +383,21 @@ if let web = webArea(), let flash = find(web, limit: 20000, { string($0, kAXRole
 } else {
     log("DeepSeek V4.1 Flash is already the chosen model")
 }
-reveal(webButton("Salva"), "Salva")
+// The panel's floating "Chat con Lia" button can sit over the save bar: Save is pressed as an accessibility action.
+let save = webButton("Salva")
+AXUIElementPerformAction(save, "AXScrollToVisible" as CFString)
+pause(0.8)
+log("press Salva")
+AXUIElementPerformAction(save, kAXPressAction as CFString)
 pause(2.5)
 shot("brain-saved")
-let agentModel = run("/Applications/Cora.app/Contents/MacOS/cora-node", ["--no-warnings", "-e", "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});process.stdout.write(JSON.stringify(db.prepare(\"select json_extract(data,'$.name') name, json_extract(data,'$.model') model, json_extract(data,'$.credentialId') credential from agents\").all()))", NSHomeDirectory() + "/Library/Application Support/Cora/Local/home/cora.db"]).1
+let agentsQuery = "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});process.stdout.write(JSON.stringify(db.prepare(\"select json_extract(data,'$.name') name, json_extract(data,'$.model') model, json_extract(data,'$.credentialId') credential from agents\").all()))"
+var agentModel = ""
+for _ in 0..<10 {
+    agentModel = run("/Applications/Cora.app/Contents/MacOS/cora-node", ["--no-warnings", "-e", agentsQuery, NSHomeDirectory() + "/Library/Application Support/Cora/Local/home/cora.db"]).1
+    if agentModel.contains("deepseek") { break }
+    pause(1)
+}
 log("agents in the space's database: \(agentModel)")
 guard agentModel.contains("deepseek") else { fail("the agent did not take DeepSeek from its Brain tab") }
 

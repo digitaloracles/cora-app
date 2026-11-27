@@ -187,8 +187,40 @@ final class LocalSpaceController: ObservableObject {
         let label = Self.boxHash()
         let current = try await capture(Self.docker, ["image", "inspect", LocalSpace.boxImage, "--format", "{{index .Config.Labels \"cora.box\"}}"], environment: dockerEnvironment)
         if current.code == 0, current.output.trimmingCharacters(in: .whitespacesAndNewlines) == label { return }
+        if await downloadComputer(label) { return }
         let code = try await run(Self.docker, ["build", "--label", "cora.box=\(label)", "-t", LocalSpace.boxImage, Self.box.path], environment: dockerEnvironment)
         guard code == 0 else { throw Problem.computer(activity.isEmpty ? "docker build \(code)" : activity) }
+    }
+
+    /// The image CI built from the same box/ for this Mac's VM, published as a release of the public cora-app repo:
+    /// a download of about 1 GB instead of building 2.5 GB here. False when it is not there, and the VM builds it.
+    func downloadComputer(_ label: String) async -> Bool {
+        #if arch(arm64)
+        let arch = "arm64"
+        #else
+        let arch = "x86_64"
+        #endif
+        let address = "https://github.com/digitaloracles/cora-app/releases/download/cora-box-\(label)/cora-box-\(arch).tar.gz"
+        let file = space.runtime.appendingPathComponent("cora-box-\(label)-\(arch).tar.gz")
+        try? FileManager.default.createDirectory(at: space.runtime, withIntermediateDirectories: true)
+        let watcher = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                let size = ((try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? NSNumber)?.int64Value ?? 0
+                if size > 0 { self?.activity = String(localized: "Downloading the agents' computer: \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))") }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+        defer {
+            watcher.cancel()
+            try? FileManager.default.removeItem(at: file)
+        }
+        guard let fetched = try? await capture(URL(fileURLWithPath: "/usr/bin/curl"), ["-fsSL", "--retry", "3", "-o", file.path, address], environment: ["PATH": "/usr/bin:/bin"]),
+              fetched.code == 0 else { return false }
+        watcher.cancel()
+        activity = String(localized: "Loading the agents' computer into the VM…")
+        guard let loaded = try? await run(Self.docker, ["load", "-i", file.path], environment: dockerEnvironment), loaded == 0 else { return false }
+        let current = try? await capture(Self.docker, ["image", "inspect", LocalSpace.boxImage, "--format", "{{index .Config.Labels \"cora.box\"}}"], environment: dockerEnvironment)
+        return current?.code == 0 && current?.output.trimmingCharacters(in: .whitespacesAndNewlines) == label
     }
 
     /// The same label deploy/macos.sh gives the image: the first 16 hex digits of the SHA-256 of box/*, in name order.

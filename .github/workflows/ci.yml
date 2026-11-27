@@ -140,9 +140,50 @@ jobs:
           gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/Cora.dmg" "$RUNNER_TEMP/Cora.zip" --title "Cora $GITHUB_REF_NAME" \
             --notes "macOS 14 or later. Signed with Developer ID and notarized by Apple: open Cora.dmg and drag Cora into Applications."
 
+  # The agents' computer, built once per version of cora's box/ for each kind of Mac's VM on a native Linux runner,
+  # published as a release of this public repo: the app downloads it instead of building 2.5 GB on the person's Mac.
+  box:
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    env:
+      CORA_REF: ${{ github.event.inputs.cora_ref || vars.CORA_REF || 'main' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: digitaloracles/cora
+          ref: ${{ env.CORA_REF }}
+          path: cora
+      - name: Build and publish cora-box
+        run: |
+          # The same label the app computes: the first 16 hex digits of the SHA-256 of box/*, in name order.
+          HASH=$(cd cora/box && LC_ALL=C ls -1A | while IFS= read -r f; do cat "$f"; done | sha256sum | cut -c1-16)
+          TAG="cora-box-$HASH"
+          ASSET="cora-box-${{ matrix.arch }}.tar.gz"
+          echo "box $HASH for ${{ matrix.arch }}"
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx "$ASSET"; then
+            echo "$TAG/$ASSET is already published"; exit 0
+          fi
+          time docker build -q --label "cora.box=$HASH" -t cora-box:latest cora/box
+          time docker save cora-box:latest | gzip -1 > "$ASSET"
+          ls -la "$ASSET"
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "Agents' computer $HASH" --notes "cora-box built from box/ of digitaloracles/cora ($CORA_REF). The Mac app downloads it and loads it into its VM with docker load." \
+            2>/dev/null || true
+          gh release upload "$TAG" "$ASSET" -R "$GITHUB_REPOSITORY" --clobber
+
   # A second, clean Mac: the notarized DMG installed and used as a person would, recorded on screen.
   video:
-    needs: build
+    needs: [build, box]
     if: github.event_name != 'pull_request'
     uses: ./.github/workflows/e2e-video.yml
     secrets: inherit
