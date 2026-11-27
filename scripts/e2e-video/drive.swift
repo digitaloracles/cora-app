@@ -110,7 +110,16 @@ func launch(_ path: String, _ arguments: [String]) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: path)
     process.arguments = arguments
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
     try? process.run()
+}
+
+/// The agent that asks about apps from the internet (its bundle id has changed across macOS versions).
+func gatekeeperAgent() -> AXUIElement? {
+    NSWorkspace.shared.runningApplications.first {
+        $0.localizedName == "CoreServicesUIAgent" || ($0.bundleIdentifier ?? "").lowercased().contains("coreservices.uiagent") || ($0.bundleIdentifier ?? "") == "com.apple.CoreServicesUIAgent"
+    }.map { AXUIElementCreateApplication($0.processIdentifier) }
 }
 
 // MARK: Mouse and keyboard
@@ -228,7 +237,7 @@ launch("/usr/bin/open", [appPath])
 log("opened Cora from Applications")
 let opened = Date().addingTimeInterval(60)
 while Date() < opened {
-    if let agent = application("com.apple.CoreServicesUIAgent"),
+    if let agent = gatekeeperAgent(),
        let button = find(agent, { string($0, kAXRoleAttribute) == "AXButton" && ["Apri", "Open"].contains(string($0, kAXTitleAttribute)) }) {
         pause(2)
         shot("gatekeeper")
