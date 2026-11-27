@@ -199,10 +199,36 @@ final class LocalSpaceController: ObservableObject {
         return String(SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined().prefix(16))
     }
 
+    /// The PATH of the person's login shell, where their CLIs are; the usual folders when the shell does not answer.
+    nonisolated static func loginPath() -> [String] {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let usual = ["/opt/homebrew/bin", "/usr/local/bin", home + "/.local/bin", home + "/.claude/local", home + "/.npm-global/bin", home + "/.bun/bin"]
+        let shell = ProcessInfo.processInfo.environment["SHELL"].flatMap { $0.hasPrefix("/") ? $0 : nil } ?? "/bin/zsh"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: shell)
+        process.arguments = ["-ilc", "printf '\\n__CORA_PATH__%s__CORA_PATH__\\n' \"$PATH\""]
+        process.standardInput = FileHandle.nullDevice
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        var found: [String] = []
+        if (try? process.run()) != nil {
+            let deadline = Date().addingTimeInterval(5)
+            while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
+            if process.isRunning { process.terminate() }
+            let text = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            if let range = text.range(of: "__CORA_PATH__"), let end = text.range(of: "__CORA_PATH__", range: range.upperBound..<text.endIndex) {
+                found = text[range.upperBound..<end.lowerBound].split(separator: ":").map(String.init)
+            }
+        }
+        return (found + usual).filter { FileManager.default.fileExists(atPath: $0) }
+    }
+
     /// Starts the LaunchAgent when it is not loaded or points to another copy of the app, then waits for the panel.
     func start() async throws {
         linkNode()
-        let data = try space.launchAgent(node: Self.node, main: Self.main, tools: Self.tools)
+        let userPath = await Task.detached { Self.loginPath() }.value
+        let data = try space.launchAgent(node: Self.node, main: Self.main, tools: Self.tools, userPath: userPath)
         let file = LocalSpace.launchAgentFile
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         let domain = "gui/\(getuid())"

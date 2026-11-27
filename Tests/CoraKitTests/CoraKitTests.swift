@@ -444,6 +444,11 @@ import Testing
         #expect(server["CORA_BOX_IMAGE"] == "cora-box:latest")
         #expect(server["DOCKER_CONFIG"] == "/tmp/rt/docker")
         #expect(space.serverEnvironment()["CORA_DOCKER"] == nil)
+        let path = space.serverEnvironment(tools: tools, userPath: ["/opt/homebrew/bin", "/usr/bin", "relative", "/Users/me/.local/bin"])["PATH"] ?? ""
+        let dirs = path.split(separator: ":").map(String.init)
+        #expect(dirs.firstIndex(of: tools.path)! < dirs.firstIndex(of: "/opt/homebrew/bin")!, "the app's own tools come before the person's")
+        #expect(dirs.contains("/Users/me/.local/bin") && !dirs.contains("relative"), "the login shell's folders join, only absolute ones")
+        #expect(dirs.filter { $0 == "/usr/bin" }.count == 1, "no folder twice")
     }
 
     @Test func secretsAreFreshAndHoldNoModelKey() {
