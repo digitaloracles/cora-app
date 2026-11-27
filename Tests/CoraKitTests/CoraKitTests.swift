@@ -403,3 +403,31 @@ import Testing
         #expect(try #require(Notice(payload: ["channelId": "1"])).belongs(to: origin), "a notice without its space belongs to the one on screen")
     }
 }
+
+@Suite struct LocalSpaceTests {
+    @Test func envRoundTripsQuotesAndKeepsKeysOutOfArguments() throws {
+        let values = ["CORA_ADMIN_PASSWORD": "a'b c", "DEEPSEEK_API_KEY": "sk-123"]
+        let text = LocalSpace.envText(values)
+        #expect(text == "CORA_ADMIN_PASSWORD='a'\\''b c'\nDEEPSEEK_API_KEY='sk-123'\n")
+        #expect(LocalSpace.parseEnv(text) == values)
+        let space = LocalSpace(root: URL(fileURLWithPath: "/tmp/cora-local"))
+        let data = try space.launchAgent(node: URL(fileURLWithPath: "/Applications/Cora.app/Contents/MacOS/cora-node"), main: URL(fileURLWithPath: "/Applications/Cora.app/Contents/Resources/cora-server/src/main.js"))
+        let plist = try #require(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        #expect(plist["Label"] as? String == "space.usecora.local")
+        let arguments = try #require(plist["ProgramArguments"] as? [String])
+        #expect(arguments.contains("/tmp/cora-local/env"))
+        #expect(!String(decoding: data, as: UTF8.self).contains("sk-123"), "the key stays in the env file")
+        let env = try #require(plist["EnvironmentVariables"] as? [String: String])
+        #expect(env["PORT"] == "4370")
+        #expect(env["CORA_HOME"] == "/tmp/cora-local/home")
+    }
+
+    @Test func secretsAreFreshAndSkipAnEmptyKey() {
+        let first = LocalSpace.secrets(deepseekKey: "  ")
+        let second = LocalSpace.secrets(deepseekKey: "sk-x")
+        #expect(first["DEEPSEEK_API_KEY"] == nil)
+        #expect(second["DEEPSEEK_API_KEY"] == "sk-x")
+        #expect(first["CORA_ADMIN_PASSWORD"] != second["CORA_ADMIN_PASSWORD"])
+        #expect(first["CORA_SESSION_KEY"]?.count == 64)
+    }
+}

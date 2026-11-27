@@ -1,0 +1,266 @@
+// Drives the real Cora.app on a clean Mac as a person would, with the mouse and the keyboard, and checks each step.
+// Usage: swiftc -O drive.swift -o drive && E2E_KEY=… ./drive <out dir>
+import AppKit
+import ApplicationServices
+import Foundation
+
+let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "out"
+let started = Date()
+setvbuf(stdout, nil, _IOLBF, 0)
+
+func log(_ text: String) { print(String(format: "[%6.1fs] ", Date().timeIntervalSince(started)) + text) }
+func pause(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
+
+@discardableResult
+func run(_ path: String, _ arguments: [String]) -> (Int32, String) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: path)
+    process.arguments = arguments
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+    try? process.run()
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+}
+
+var shots = 0
+func shot(_ name: String) {
+    shots += 1
+    run("/usr/sbin/screencapture", ["-x", "-C", "\(out)/\(String(format: "%02d", shots))-\(name).png"])
+}
+
+func fail(_ text: String) -> Never {
+    log("FAIL: \(text)")
+    shot("failure")
+    exit(1)
+}
+
+func wait<T>(_ what: String, timeout: Double, every: Double = 0.5, _ probe: () -> T?) -> T {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if let value = probe() { return value }
+        pause(every)
+    }
+    fail("timed out after \(Int(timeout))s waiting for \(what)")
+}
+
+// MARK: Accessibility
+
+func application(_ bundle: String) -> AXUIElement? {
+    NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first.map { AXUIElementCreateApplication($0.processIdentifier) }
+}
+
+func value(_ element: AXUIElement, _ name: String) -> AnyObject? {
+    var result: AnyObject?
+    return AXUIElementCopyAttributeValue(element, name as CFString, &result) == .success ? result : nil
+}
+
+func string(_ element: AXUIElement, _ name: String) -> String { value(element, name) as? String ?? "" }
+
+func children(_ element: AXUIElement) -> [AXUIElement] { value(element, kAXChildrenAttribute) as? [AXUIElement] ?? [] }
+
+func find(_ root: AXUIElement, limit: Int = 6000, _ match: (AXUIElement) -> Bool) -> AXUIElement? {
+    var queue = [root]
+    var seen = 0
+    while !queue.isEmpty && seen < limit {
+        let element = queue.removeFirst()
+        seen += 1
+        if match(element) { return element }
+        queue.append(contentsOf: children(element))
+    }
+    return nil
+}
+
+func frame(_ element: AXUIElement) -> CGRect? {
+    guard let position = value(element, kAXPositionAttribute), let size = value(element, kAXSizeAttribute) else { return nil }
+    var point = CGPoint.zero, extent = CGSize.zero
+    AXValueGetValue(position as! AXValue, .cgPoint, &point)
+    AXValueGetValue(size as! AXValue, .cgSize, &extent)
+    return CGRect(origin: point, size: extent)
+}
+
+func identified(_ id: String) -> (AXUIElement) -> Bool { { string($0, "AXIdentifier") == id } }
+
+// MARK: Mouse and keyboard
+
+var cursor = CGEvent(source: nil)?.location ?? CGPoint(x: 512, y: 384)
+
+func move(to target: CGPoint, seconds: Double = 0.55) {
+    let steps = max(8, Int(seconds * 60))
+    let from = cursor
+    for index in 1...steps {
+        let t = Double(index) / Double(steps)
+        let eased = t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
+        let point = CGPoint(x: from.x + (target.x - from.x) * eased, y: from.y + (target.y - from.y) * eased)
+        CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+        usleep(useconds_t(seconds / Double(steps) * 1_000_000))
+    }
+    cursor = target
+}
+
+func click(_ point: CGPoint) {
+    move(to: point)
+    pause(0.15)
+    CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    usleep(70_000)
+    CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    pause(0.25)
+}
+
+func click(_ element: AXUIElement, _ name: String) {
+    guard let rect = frame(element), rect.width > 0 else { fail("\(name) has no frame") }
+    log("click \(name) at \(Int(rect.midX)),\(Int(rect.midY))")
+    click(CGPoint(x: rect.midX, y: rect.midY))
+}
+
+func drag(from: CGPoint, to: CGPoint) {
+    move(to: from)
+    CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: from, mouseButton: .left)?.post(tap: .cghidEventTap)
+    pause(0.3)
+    let steps = 50
+    for index in 1...steps {
+        let t = Double(index) / Double(steps)
+        let point = CGPoint(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t)
+        CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+        usleep(16_000)
+    }
+    cursor = to
+    pause(0.4)
+    CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: to, mouseButton: .left)?.post(tap: .cghidEventTap)
+    pause(0.5)
+}
+
+func type(_ text: String, every: useconds_t = 45_000) {
+    for character in text {
+        let units = Array(String(character).utf16)
+        for down in [true, false] {
+            let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
+            event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
+            event?.post(tap: .cghidEventTap)
+        }
+        usleep(every)
+    }
+}
+
+func press(_ key: CGKeyCode, flags: CGEventFlags = []) {
+    for down in [true, false] {
+        let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down)
+        event?.flags = flags
+        event?.post(tap: .cghidEventTap)
+    }
+    pause(0.2)
+}
+
+// MARK: The journey
+
+let bundle = "space.usecora.app"
+let appPath = "/Applications/Cora.app"
+guard let key = ProcessInfo.processInfo.environment["E2E_KEY"], !key.isEmpty else { fail("E2E_KEY is not set") }
+let question = ProcessInfo.processInfo.environment["E2E_QUESTION"] ?? "Ciao Lia! Presentati in due frasi e dimmi su quale modello giri."
+log("AX trusted: \(AXIsProcessTrusted())")
+
+// 1. The DMG, as it opens from Downloads: drag Cora into Applications.
+let volume = "/Volumes/Cora"
+run("/usr/bin/open", [volume])
+pause(3)
+shot("dmg")
+if let finder = application("com.apple.finder") {
+    let icon = find(finder) { string($0, kAXTitleAttribute) == "Cora" || string($0, kAXTitleAttribute) == "Cora.app" }
+    let target = find(finder) { ["Applications", "Applicazioni"].contains(string($0, kAXTitleAttribute)) && string($0, kAXRoleAttribute) != "AXStaticText" && frame($0).map { $0.width < 300 } == true }
+    if let icon, let target, let a = frame(icon), let b = frame(target) {
+        log("drag Cora.app onto Applications")
+        drag(from: CGPoint(x: a.midX, y: a.midY), to: CGPoint(x: b.midX, y: b.midY))
+    } else {
+        log("Finder icons not found by accessibility: copying with ditto")
+    }
+}
+let copied = Date().addingTimeInterval(25)
+while Date() < copied && !FileManager.default.fileExists(atPath: appPath + "/Contents/MacOS/Cora") { pause(1) }
+pause(4)
+if !FileManager.default.fileExists(atPath: appPath + "/Contents/MacOS/Cora") {
+    run("/usr/bin/ditto", ["\(volume)/Cora.app", appPath])
+}
+let (gk, gatekeeper) = run("/usr/sbin/spctl", ["-a", "-vvv", "-t", "exec", appPath])
+log("Gatekeeper (\(gk)): \(gatekeeper.replacingOccurrences(of: "\n", with: " | "))")
+if let finder = application("com.apple.finder"), let window = find(finder, { string($0, kAXRoleAttribute) == "AXWindow" }) {
+    AXUIElementPerformAction(window, "AXRaise" as CFString)
+}
+run("/usr/bin/osascript", ["-e", "tell application \"Finder\" to close every window"])
+
+// 2. First launch: macOS asks about an app from the internet, then Cora asks where the space runs.
+run("/usr/bin/open", [appPath])
+let opened = Date().addingTimeInterval(20)
+while Date() < opened {
+    if let agent = application("com.apple.CoreServicesUIAgent"),
+       let button = find(agent, { string($0, kAXRoleAttribute) == "AXButton" && ["Apri", "Open"].contains(string($0, kAXTitleAttribute)) }) {
+        shot("gatekeeper")
+        click(button, "Open in the Gatekeeper dialog")
+        break
+    }
+    if let cora = application(bundle), find(cora, identified("choice-local")) != nil { break }
+    pause(0.5)
+}
+let cora = wait("Cora to launch", timeout: 30) { application(bundle) }
+let local = wait("the choice of where the space runs", timeout: 30) { find(cora, identified("choice-local")) }
+pause(1.5)
+shot("welcome")
+click(local, "On this Mac")
+pause(1)
+
+// 3. The DeepSeek key and the first agent's name, then the real creation.
+let field = wait("the DeepSeek key field", timeout: 15) { find(cora, identified("deepseek-key")) }
+click(field, "DeepSeek key")
+type(key, every: 12_000)
+pause(0.6)
+shot("key")
+let create = wait("Create the space", timeout: 10) { find(cora, identified("create-space")) }
+click(create, "Create the space")
+log("creating the space")
+var lastStep = ""
+let ready = Date().addingTimeInterval(420)
+while Date() < ready {
+    if find(cora, identified("space-ready")) != nil { break }
+    if let failed = find(cora, { string($0, kAXRoleAttribute) == "AXStaticText" && string($0, kAXValueAttribute).contains("Riprova") }) { _ = failed }
+    let texts = run("/bin/sh", ["-c", "tail -n 1 \"$HOME/Library/Application Support/Cora/Local/cora.log\" 2>/dev/null"]).1.trimmingCharacters(in: .whitespacesAndNewlines)
+    if texts != lastStep, !texts.isEmpty { lastStep = texts; log("server: \(texts.prefix(140))") }
+    pause(1)
+}
+guard find(cora, identified("space-ready")) != nil else { fail("the space was not ready within 7 minutes") }
+shot("created")
+log("space ready")
+
+// 4. The panel opens in the window, signed in, on the first agent's chat: a real question to a real agent.
+let web = wait("the panel in the window", timeout: 60) { find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) }
+let box = wait("the chat box of the agent", timeout: 60) { find(web, { string($0, kAXRoleAttribute) == "AXTextArea" && (frame($0)?.width ?? 0) > 100 }) }
+pause(1.5)
+shot("panel")
+click(box, "chat box")
+type(question)
+pause(0.5)
+press(36)
+log("asked: \(question)")
+let db = NSHomeDirectory() + "/Library/Application Support/Cora/Local/home/cora.db"
+let node = appPath + "/Contents/MacOS/cora-node"
+let reader = "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});const r=db.prepare(\"select author_name a, content c from messages where kind='agent' order by id desc limit 1\").get();process.stdout.write(r?JSON.stringify(r):'')"
+let reply = wait("the agent's reply", timeout: 180, every: 2) { () -> String? in
+    let text = run(node, ["--no-warnings", "-e", reader, db]).1.trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.hasPrefix("{") ? text : nil
+}
+log("reply in the space's database: \(reply)")
+pause(5)
+shot("reply")
+
+// 5. The menu bar, untouched: the same popover, now on the space of this Mac.
+if let bar = value(cora, "AXExtrasMenuBar"), let item = children(bar as! AXUIElement).first {
+    click(item, "Cora in the menu bar")
+    pause(3)
+    shot("menubar")
+    press(53)
+} else {
+    log("menu bar item not found by accessibility")
+}
+pause(2)
+shot("end")
+log("done")

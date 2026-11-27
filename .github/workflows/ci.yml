@@ -43,12 +43,24 @@ jobs:
           security find-identity -v -p codesigning "$KC"
           echo "CORA_SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
           echo "CORA_DEVELOPER_ID_IDENTITY=A838170BF5F33922C8545DD1461CD45AC0C30CFB" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          repository: digitaloracles/cora
+          ref: ${{ env.CORA_REF }}
+          path: cora
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Build app
+        env:
+          CORA_SERVER_SRC: ${{ github.workspace }}/cora
         run: scripts/build-app.sh
       - name: Stable signature
         if: github.event_name != 'pull_request'
         run: |
           codesign --verify --strict --verbose=2 build/Cora.app
+          codesign -d --entitlements - build/Cora.app/Contents/MacOS/cora-node 2>&1 | grep -E 'allow-jit|disable-library-validation'
+          build/Cora.app/Contents/MacOS/cora-node -e 'console.log("signed node runs", process.version, process.arch)'
           INFO="$(codesign -dvv build/Cora.app 2>&1)"
           echo "$INFO" | grep -E 'Authority|Identifier|Signature|Timestamp|flags'
           echo "$INFO" | grep -q 'Authority=Developer ID Application: Sebastiano Cataudo (89J2AG5K92)' || { echo "not signed with the Developer ID Application certificate"; exit 1; }
@@ -58,14 +70,6 @@ jobs:
           case "$REQ" in *'subject.OU] = "89J2AG5K92"'*) ;; *) echo "designated requirement is not pinned to the team"; exit 1;; esac
       - name: Render previews
         run: build/Cora.app/Contents/MacOS/Cora --render-preview "$RUNNER_TEMP/previews"
-      - uses: actions/checkout@v4
-        with:
-          repository: digitaloracles/cora
-          ref: ${{ env.CORA_REF }}
-          path: cora
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - name: Cora server dependencies
         run: npm ci --prefix cora --no-audit --no-fund
       - name: End-to-end against a real Cora server
@@ -135,3 +139,45 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/Cora.dmg" "$RUNNER_TEMP/Cora.zip" --title "Cora $GITHUB_REF_NAME" \
             --notes "macOS 14 or later. Signed with Developer ID and notarized by Apple: open Cora.dmg and drag Cora into Applications."
+
+  # A second, clean Mac: the notarized DMG installed and used as a person would, recorded on screen.
+  video:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Cora.dmg
+          path: dmg
+      - name: Italian Mac
+        run: |
+          defaults write -g AppleLanguages -array it-IT
+          defaults write -g AppleLocale it_IT
+          killall cfprefsd || true
+      - name: Install, create the space and talk to its agent
+        env:
+          E2E_KEY: ${{ secrets.E2E_DEEPSEEK_API_KEY }}
+        run: |
+          mkdir -p out
+          swiftc -O scripts/e2e-video/drive.swift -o "$RUNNER_TEMP/drive"
+          xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" dmg/Cora.dmg
+          hdiutil attach dmg/Cora.dmg
+          screencapture -v -C -V 900 -x out/e2e.mov &
+          REC=$!
+          sleep 2
+          set +e
+          "$RUNNER_TEMP/drive" out 2>&1 | tee out/drive.log
+          CODE=${PIPESTATUS[0]}
+          set -e
+          kill -INT $REC || true
+          for _ in $(seq 1 30); do kill -0 $REC 2>/dev/null || break; sleep 1; done
+          tail -n 80 "$HOME/Library/Application Support/Cora/Local/cora.log" > out/server-tail.log 2>/dev/null || true
+          ls -la out
+          exit $CODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-video
+          path: out
