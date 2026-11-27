@@ -34,14 +34,26 @@ public struct CoraClient: Sendable {
     }
 
     public static func exchange(_ link: ConnectLink, deviceName: String, platform: String, session: URLSession = .shared) async throws -> Paired {
+        try await exchange(link, deviceName: deviceName, platform: platform, panelVerifier: nil, session: session).0
+    }
+
+    public static func exchange(_ link: ConnectLink, deviceName: String, platform: String, panelVerifier: String?, session: URLSession) async throws -> (Paired, [HTTPCookie]) {
         var request = URLRequest(url: link.server.appendingPathComponent("app/v1/session"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("1", forHTTPHeaderField: "X-Cora")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["code": link.code, "name": deviceName, "platform": platform])
+        var body = ["code": link.code, "name": deviceName, "platform": platform]
+        body["panelVerifier"] = panelVerifier
+        request.httpShouldHandleCookies = false
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await session.data(for: request)
         try check(data, response)
-        return try JSONDecoder().decode(Paired.self, from: data)
+        guard let http = response as? HTTPURLResponse, let address = http.url,
+              Space.origin(address.absoluteString) == link.server else { throw ClientError.invalidResponse }
+        let cookies = http.value(forHTTPHeaderField: "Set-Cookie").map {
+            HTTPCookie.cookies(withResponseHeaderFields: ["Set-Cookie": $0], for: address)
+        } ?? []
+        return (try JSONDecoder().decode(Paired.self, from: data), cookies)
     }
 
     func request(_ path: String, method: String = "GET") -> URLRequest {

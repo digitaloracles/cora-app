@@ -36,18 +36,26 @@ struct CoraApp: App {
     }
 }
 
-enum Tab: String, Hashable { case agents, subscriptions, threads, plans, spaces }
+enum Tab: String, Hashable { case space, agents, subscriptions, threads, plans }
 
 struct RootView: View {
     @ObservedObject var spaces: Spaces
-    @State private var tab: Tab = Tab(rawValue: ProcessInfo.processInfo.environment["CORA_DEMO_TAB"] ?? "") ?? .agents
+    @State private var tab: Tab = Tab(rawValue: ProcessInfo.processInfo.environment["CORA_DEMO_TAB"] ?? "") ?? (Spaces.demo ? .agents : .space)
+
+    @State private var showingSpaces = ProcessInfo.processInfo.environment["CORA_DEMO_TAB"] == "spaces"
 
     var body: some View {
         Group {
             if let store = spaces.current {
-                SpaceTabs(spaces: spaces, store: store, tab: $tab).id(store.id)
+                SpaceTabs(spaces: spaces, store: store, tab: $tab, showingSpaces: $showingSpaces).id(store.connection.deviceId + store.id.absoluteString)
             } else {
                 NavigationStack { ConnectView(spaces: spaces).navigationTitle("Cora") }
+            }
+        }
+        .sheet(isPresented: $showingSpaces) {
+            NavigationStack {
+                SpacesView(spaces: spaces, didSelect: { showingSpaces = false })
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingSpaces = false } } }
             }
         }
         // A notice from another connected space switches to it first; that space's tabs then open it.
@@ -73,6 +81,7 @@ struct SpaceTabs: View {
     @ObservedObject var spaces: Spaces
     @ObservedObject var store: SpaceStore
     @Binding var tab: Tab
+    @Binding var showingSpaces: Bool
     @Environment(\.scenePhase) private var phase
     @State private var agentPath: [String] = ProcessInfo.processInfo.environment["CORA_DEMO_AGENT"].map { [$0] } ?? []
     @State private var threadPath: [ThreadRoute] = ProcessInfo.processInfo.environment["CORA_DEMO_THREAD"].map { [ThreadRoute(id: $0)] } ?? []
@@ -80,18 +89,38 @@ struct SpaceTabs: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            NavigationStack(path: $agentPath) { AgentsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
+            NavigationStack {
+                VStack(spacing: 0) {
+                    HStack {
+                        SpaceSelector(spaces: spaces, store: store, showingSpaces: $showingSpaces)
+                        Spacer()
+                        Button { tab = .agents } label: {
+                            Image(systemName: "xmark")
+                                .font(.callout.weight(.semibold))
+                                .frame(minWidth: 44, minHeight: 28)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Close space panel")
+                        .accessibilityIdentifier("app-tabs")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .padding(.leading, 16)
+                    .padding(.trailing, 4)
+                    SpacePanel(connection: store.connection, spaces: spaces)
+                }
+                .toolbar(.hidden, for: .navigationBar, .tabBar)
+            }
+            .tabItem { Label("Space", systemImage: "globe") }.tag(Tab.space)
+            NavigationStack(path: $agentPath) { AgentsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store, showingSpaces: $showingSpaces) } }
                 .tabItem { Label("Agents", systemImage: "person.2") }.tag(Tab.agents)
                 .badge(store.snapshot?.requests.count ?? 0)
-            NavigationStack { SubscriptionsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
+            NavigationStack { SubscriptionsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store, showingSpaces: $showingSpaces) } }
                 .tabItem { Label("Subscriptions", systemImage: "gauge.with.dots.needle.33percent") }.tag(Tab.subscriptions)
-            NavigationStack(path: $threadPath) { ThreadsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
+            NavigationStack(path: $threadPath) { ThreadsView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store, showingSpaces: $showingSpaces) } }
                 .tabItem { Label("Threads", systemImage: "text.bubble") }.tag(Tab.threads)
-            NavigationStack(path: $planPath) { PlansView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store) } }
+            NavigationStack(path: $planPath) { PlansView(store: store).toolbar { SpaceMenu(spaces: spaces, store: store, showingSpaces: $showingSpaces) } }
                 .tabItem { Label("Plans", systemImage: "checklist") }.tag(Tab.plans)
                 .badge(store.snapshot?.plans?.open.count ?? 0)
-            NavigationStack { SpacesView(spaces: spaces) }
-                .tabItem { Label("Spaces", systemImage: "square.stack") }.tag(Tab.spaces)
         }
         .onChange(of: store.revoked) { _, revoked in if revoked { spaces.forget(store) } }
         // A tap arrives while the app is still coming back to the front, or before these tabs exist when it launched the app:
@@ -104,6 +133,7 @@ struct SpaceTabs: View {
     private func take(_ notice: Notice?) {
         guard let notice else { return }
         if !notice.belongs(to: store.id) && spaces.stores.contains(where: { notice.belongs(to: $0.id) }) { return }
+        showingSpaces = false
         Notices.shared.notice = nil
         open(notice.route)
     }
@@ -125,25 +155,37 @@ struct SpaceMenu: ToolbarContent {
     @ObservedObject var spaces: Spaces
     @ObservedObject var store: SpaceStore
 
+    @Binding var showingSpaces: Bool
+
     var body: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            HStack(spacing: 6) {
-                Circle().fill(store.streamOnline ? Color.green : Color.orange).frame(width: 7, height: 7)
-                    .accessibilityLabel(store.streamOnline ? Text("Live") : Text("Reconnecting to the live stream…"))
-                if spaces.stores.count > 1 {
-                    Menu {
-                        Picker("Space", selection: Binding(get: { spaces.selected ?? store.id }, set: { spaces.selected = $0 })) {
-                            ForEach(spaces.stores) { Text($0.title).tag($0.id) }
-                        }
-                    } label: {
-                        HStack(spacing: 3) { Text(store.title).font(.subheadline.weight(.semibold)); Image(systemName: "chevron.down").font(.caption2) }
-                    }
-                } else {
-                    Text(store.title).font(.subheadline.weight(.semibold))
-                }
-            }
-            .fixedSize()
-            .padding(.horizontal, 4)
+            SpaceSelector(spaces: spaces, store: store, showingSpaces: $showingSpaces)
+                .font(.subheadline.weight(.semibold))
         }
+    }
+}
+
+private struct SpaceSelector: View {
+    @ObservedObject var spaces: Spaces
+    @ObservedObject var store: SpaceStore
+    @Binding var showingSpaces: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(store.streamOnline ? Color.green : Color.orange).frame(width: 7, height: 7)
+                .accessibilityLabel(store.streamOnline ? Text("Live") : Text("Reconnecting to the live stream…"))
+            Menu {
+                if spaces.stores.count > 1 {
+                    Picker("Space", selection: Binding(get: { spaces.selected ?? store.id }, set: { spaces.selected = $0 })) {
+                        ForEach(spaces.stores) { Text($0.title).tag($0.id) }
+                    }
+                }
+                Button { showingSpaces = true } label: { Label("Spaces", systemImage: "square.stack") }
+            } label: {
+                HStack(spacing: 3) { Text(store.title).lineLimit(1); Image(systemName: "chevron.down").font(.caption2) }
+            }
+            .accessibilityIdentifier("space-menu")
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
