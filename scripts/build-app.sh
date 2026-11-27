@@ -48,6 +48,19 @@ if [[ -n "${CORA_SERVER_SRC:-}" ]]; then
   mkdir -p "$SERVER"
   for part in src web box package.json package-lock.json LICENSE; do ditto "$CORA_SERVER_SRC/$part" "$SERVER/$part"; done
   PATH="$NODE_CACHE/arm64/bin:$PATH" npm ci --prefix "$SERVER" --omit=dev --no-audit --no-fund --ignore-scripts --loglevel error
+  # npm installs the native packages of the machine that builds; the app is universal, so the other Mac's ones join them.
+  PATH="$NODE_CACHE/arm64/bin:$PATH" node -e '
+    const lock = require(process.argv[1] + "/package-lock.json");
+    for (const [path, entry] of Object.entries(lock.packages || {}))
+      if (entry.os?.includes("darwin") && !entry.dev && !require("fs").existsSync(process.argv[1] + "/" + path))
+        console.log(path.replace(/^.*node_modules\//, "") + "@" + entry.version + " " + path);
+  ' "$SERVER" | while read -r spec path; do
+    pack=$(mktemp -d)
+    PATH="$NODE_CACHE/arm64/bin:$PATH" npm pack "$spec" --pack-destination "$pack" --loglevel error >/dev/null
+    mkdir -p "$SERVER/$path" && tar -xzf "$pack"/*.tgz -C "$SERVER/$path" --strip-components 1
+    rm -rf "$pack"
+    echo "Added $spec for the other architecture"
+  done
   "$APP/Contents/MacOS/cora-node" -e 'console.log("bundled node", process.version, process.arch)'
   echo "Bundled Node $NODE_VERSION and Cora $(cd "$CORA_SERVER_SRC" && git rev-parse --short HEAD 2>/dev/null || echo '?')"
 
