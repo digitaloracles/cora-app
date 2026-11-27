@@ -193,3 +193,5 @@
 "No space yet" = "Nessuno space";
 "Spaces are added in the Cora window: one on this Mac, or a remote one." = "Gli space si aggiungono dalla finestra di Cora: uno su questo Mac o uno remoto.";
 "Open Cora" = "Apri Cora";
+"Downloading the agents' computer: %@" = "Scarico il computer degli agenti: %@";
+"Loading the agents' computer into the VM…" = "Carico il computer degli agenti nella macchina virtuale…";
