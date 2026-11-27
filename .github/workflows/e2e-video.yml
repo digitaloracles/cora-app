@@ -1,0 +1,81 @@
+name: E2E video
+
+# The notarized DMG on a clean Mac, installed and used as a person would, recorded on screen with a real agent.
+# Called by CI after each build; a push to buzz/not120-video replays it on the DMG of the run in scripts/e2e-video/dmg-run.
+on:
+  workflow_call:
+  push:
+    branches: ["buzz/not120-video"]
+
+jobs:
+  video:
+    # Intel: GitHub's Apple silicon runners cannot start a VM inside, and the agents' computers live in one.
+    runs-on: macos-15-intel
+    timeout-minutes: 85
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Which DMG
+        run: |
+          if [ "${{ github.workflow }}" = "E2E video" ]; then RUN="$(cat scripts/e2e-video/dmg-run)"; else RUN="${{ github.run_id }}"; fi
+          echo "DMG_RUN=$RUN" >> "$GITHUB_ENV"
+          echo "DMG from run $RUN"
+      - uses: actions/download-artifact@v4
+        with:
+          name: Cora.dmg
+          path: dmg
+          run-id: ${{ env.DMG_RUN }}
+          github-token: ${{ github.token }}
+      - name: Italian Mac
+        run: |
+          defaults write -g AppleLanguages -array it-IT
+          defaults write -g AppleLocale it_IT
+          killall cfprefsd || true
+          killall Finder Dock SystemUIServer CoreServicesUIAgent || true
+          sleep 3
+      - name: Screen recorder
+        run: brew install ffmpeg >/dev/null && ffmpeg -version | head -1
+      - name: Install, create the space and talk to its agent
+        env:
+          E2E_KEY: ${{ secrets.E2E_DEEPSEEK_API_KEY }}
+        run: |
+          mkdir -p out
+          swiftc -O scripts/e2e-video/drive.swift -o "$RUNNER_TEMP/drive"
+          xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" dmg/Cora.dmg
+          hdiutil attach dmg/Cora.dmg
+          # ffmpeg records the screen and writes the movie when it reads q on its input.
+          DEV="$(ffmpeg -hide_banner -f avfoundation -list_devices true -i "" 2>&1 | sed -nE 's/.*\[([0-9]+)\] Capture screen 0.*/\1/p' | head -1)"
+          echo "screen device: $DEV"
+          mkfifo "$RUNNER_TEMP/stop"
+          ffmpeg -hide_banner -nostats -loglevel warning -f avfoundation -capture_cursor 1 -capture_mouse_clicks 1 -framerate 30 -i "${DEV}:none" \
+            -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p out/e2e.mp4 < "$RUNNER_TEMP/stop" > out/ffmpeg.log 2>&1 &
+          REC=$!
+          exec 3> "$RUNNER_TEMP/stop"
+          sleep 2
+          set +e
+          "$RUNNER_TEMP/drive" out 2>&1 | tee out/drive.log
+          CODE=${PIPESTATUS[0]}
+          set -e
+          echo q >&3 || true
+          exec 3>&-
+          for _ in $(seq 1 60); do kill -0 $REC 2>/dev/null || break; sleep 1; done
+          if kill -0 $REC 2>/dev/null; then echo "recorder still running"; kill -INT $REC; sleep 5; else echo "recording saved"; fi
+          tail -n 80 "$HOME/Library/Application Support/Cora/Local/cora.log" > out/server-tail.log 2>/dev/null || true
+          tail -n 80 "$HOME/.cora-local/lima/colima-cora/ha.stderr.log" > out/vm-tail.log 2>/dev/null || true
+          ls -la out
+          exit $CODE
+      - name: App quit, space still running
+        run: |
+          osascript -e 'quit app "Cora"' || true
+          for _ in $(seq 1 20); do pgrep -x Cora >/dev/null || break; sleep 1; done
+          pgrep -x Cora >/dev/null && pkill -x Cora || true
+          sleep 2
+          "/Applications/Cora.app/Contents/MacOS/cora-node" --no-warnings scripts/e2e-video/closed.mjs 2>&1 | tee out/closed.log
+          exit ${PIPESTATUS[0]}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-video
+          path: out

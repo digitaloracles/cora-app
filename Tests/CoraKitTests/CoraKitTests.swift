@@ -403,3 +403,55 @@ import Testing
         #expect(try #require(Notice(payload: ["channelId": "1"])).belongs(to: origin), "a notice without its space belongs to the one on screen")
     }
 }
+
+#if os(macOS)
+@Suite struct LocalSpaceTests {
+    @Test func envRoundTripsQuotesAndKeepsKeysOutOfArguments() throws {
+        let values = ["CORA_ADMIN_PASSWORD": "a'b c", "DEEPSEEK_API_KEY": "sk-123"]
+        let text = LocalSpace.envText(values)
+        #expect(text == "CORA_ADMIN_PASSWORD='a'\\''b c'\nDEEPSEEK_API_KEY='sk-123'\n")
+        #expect(LocalSpace.parseEnv(text) == values)
+        let space = LocalSpace(root: URL(fileURLWithPath: "/tmp/cora-local"))
+        let data = try space.launchAgent(node: URL(fileURLWithPath: "/Applications/Cora.app/Contents/MacOS/cora-node"), main: URL(fileURLWithPath: "/Applications/Cora.app/Contents/Resources/cora-server/src/main.js"))
+        let plist = try #require(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        #expect(plist["Label"] as? String == "space.usecora.local")
+        let arguments = try #require(plist["ProgramArguments"] as? [String])
+        #expect(arguments.contains("/tmp/cora-local/env"))
+        #expect(!String(decoding: data, as: UTF8.self).contains("sk-123"), "the key stays in the env file")
+        let env = try #require(plist["EnvironmentVariables"] as? [String: String])
+        #expect(env["PORT"] == "4370")
+        #expect(env["CORA_HOME"] == "/tmp/cora-local/home")
+    }
+
+    @Test func machineStaysInItsOwnFoldersAndTheServerDrivesIt() throws {
+        let space = LocalSpace(root: URL(fileURLWithPath: "/tmp/cora-local"), runtime: URL(fileURLWithPath: "/tmp/rt"))
+        let tools = URL(fileURLWithPath: "/Applications/Cora.app/Contents/Resources/cora-vm/bin")
+        let vm = space.vmEnvironment(tools: tools)
+        #expect(vm["COLIMA_HOME"] == "/tmp/rt/colima")
+        #expect(vm["LIMA_HOME"] == "/tmp/rt/lima")
+        #expect(vm["DOCKER_CONFIG"] == "/tmp/rt/docker", "the user's ~/.docker is never touched")
+        #expect(vm["PATH"]?.hasPrefix(tools.path + ":") == true, "colima finds the app's own limactl and docker")
+        let arguments = LocalSpace.vmStartArguments(cores: 10, memory: 32 * 1_073_741_824)
+        #expect(arguments == ["start", "cora", "--vm-type", "vz", "--runtime", "docker", "--cpu", "4", "--memory", "8", "--disk", "60", "--activate=false"])
+        let small = LocalSpace.vmSize(cores: 4, memory: 8 * 1_073_741_824)
+        #expect(small.cpus == 2 && small.memoryGB == 4 && small.diskGB == 60, "a small Mac still gives the VM 2 cores and 4 GB")
+        let agent = try #require(try PropertyListSerialization.propertyList(from: space.vmLaunchAgent(colima: tools.appendingPathComponent("colima")), format: nil) as? [String: Any])
+        #expect(agent["Label"] as? String == "space.usecora.vm")
+        #expect(agent["KeepAlive"] == nil, "colima start boots the VM and exits; Lima keeps it running")
+        #expect(agent["ProgramArguments"] as? [String] == [tools.appendingPathComponent("colima").path, "start", "cora", "--activate=false"])
+        let server = space.serverEnvironment(tools: tools)
+        #expect(server["CORA_DOCKER"] == tools.appendingPathComponent("docker").path)
+        #expect(server["CORA_BOX_IMAGE"] == "cora-box:latest")
+        #expect(server["DOCKER_CONFIG"] == "/tmp/rt/docker")
+        #expect(space.serverEnvironment()["CORA_DOCKER"] == nil)
+    }
+
+    @Test func secretsAreFreshAndHoldNoModelKey() {
+        let first = LocalSpace.secrets()
+        let second = LocalSpace.secrets()
+        #expect(Set(first.keys) == ["CORA_ADMIN_PASSWORD", "CORA_SESSION_KEY"])
+        #expect(first["CORA_ADMIN_PASSWORD"] != second["CORA_ADMIN_PASSWORD"])
+        #expect(first["CORA_SESSION_KEY"]?.count == 64)
+    }
+}
+#endif

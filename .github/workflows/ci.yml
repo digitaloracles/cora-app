@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "buzz/**"]
+    branches: [main, "buzz/**", "!buzz/not120-video"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -27,8 +27,8 @@ jobs:
       - name: Signing keychain
         if: github.event_name != 'pull_request'
         env:
-          P12: ${{ secrets.CORA_APP_SIGNING_P12 }}
-          P12_PASSWORD: ${{ secrets.CORA_APP_SIGNING_P12_PASSWORD }}
+          P12: ${{ secrets.CORA_APP_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.CORA_APP_DEVELOPER_ID_P12_PASSWORD }}
         run: |
           KC="$RUNNER_TEMP/signing.keychain-db"
           KC_PW="$(uuidgen)"
@@ -40,21 +40,9 @@ jobs:
           rm -f "$RUNNER_TEMP/signing.p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PW" "$KC" >/dev/null
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
-          security find-identity -p codesigning "$KC"
+          security find-identity -v -p codesigning "$KC"
           echo "CORA_SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
-          echo "CORA_SIGN_IDENTITY=2E8EB3A66ABA555B215BC2E43EFCEC16BC0F7298" >> "$GITHUB_ENV"
-      - name: Build app
-        run: scripts/build-app.sh
-      - name: Stable signature
-        if: github.event_name != 'pull_request'
-        run: |
-          codesign --verify --strict --verbose=2 build/Cora.app
-          codesign -dvv build/Cora.app 2>&1 | grep -E 'Authority|Identifier|Signature'
-          REQ="$(codesign -d -r- build/Cora.app 2>&1 | grep designated)"
-          echo "$REQ"
-          case "$REQ" in *'H"2e8eb3a66aba555b215bc2e43efcec16bc0f7298"'*) ;; *) echo "designated requirement is not pinned to the Cora signing certificate"; exit 1;; esac
-      - name: Render previews
-        run: build/Cora.app/Contents/MacOS/Cora --render-preview "$RUNNER_TEMP/previews"
+          echo "CORA_DEVELOPER_ID_IDENTITY=A838170BF5F33922C8545DD1461CD45AC0C30CFB" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           repository: digitaloracles/cora
@@ -63,10 +51,67 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Build app
+        env:
+          CORA_SERVER_SRC: ${{ github.workspace }}/cora
+        run: scripts/build-app.sh
+      - name: Stable signature
+        if: github.event_name != 'pull_request'
+        run: |
+          codesign --verify --strict --verbose=2 build/Cora.app
+          codesign -d --entitlements - build/Cora.app/Contents/MacOS/cora-node 2>&1 | grep -E 'allow-jit|disable-library-validation'
+          build/Cora.app/Contents/MacOS/cora-node -e 'console.log("signed node runs", process.version, process.arch)'
+          INFO="$(codesign -dvv build/Cora.app 2>&1)"
+          echo "$INFO" | grep -E 'Authority|Identifier|Signature|Timestamp|flags'
+          echo "$INFO" | grep -q 'Authority=Developer ID Application: Sebastiano Cataudo (89J2AG5K92)' || { echo "not signed with the Developer ID Application certificate"; exit 1; }
+          echo "$INFO" | grep -q 'flags=.*runtime' || { echo "hardened runtime is off"; exit 1; }
+          REQ="$(codesign -d -r- build/Cora.app 2>&1 | grep designated)"
+          echo "$REQ"
+          case "$REQ" in *'subject.OU] = "89J2AG5K92"'*) ;; *) echo "designated requirement is not pinned to the team"; exit 1;; esac
+      - name: Render previews
+        run: build/Cora.app/Contents/MacOS/Cora --render-preview "$RUNNER_TEMP/previews"
       - name: Cora server dependencies
         run: npm ci --prefix cora --no-audit --no-fund
       - name: End-to-end against a real Cora server
         run: node scripts/e2e.mjs build/Cora.app cora "$RUNNER_TEMP/e2e"
+      - name: Notarize and package
+        if: github.event_name != 'pull_request'
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          KEY="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          chmod 600 "$KEY"
+          AUTH=(--key "$KEY" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID")
+          NOTARY=("${AUTH[@]}" --wait --timeout 30m)
+          accepted() {
+            STATUS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$1")"
+            [ "$STATUS" = Accepted ] && return 0
+            xcrun notarytool log "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$1")" "${AUTH[@]}"
+            echo "notarization: $STATUS"; return 1
+          }
+          ditto -c -k --keepParent build/Cora.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${NOTARY[@]}" --output-format json | tee "$RUNNER_TEMP/notary-app.json"
+          accepted "$RUNNER_TEMP/notary-app.json"
+          xcrun stapler staple build/Cora.app
+          STAGE="$RUNNER_TEMP/dmg"
+          mkdir -p "$STAGE"
+          ditto build/Cora.app "$STAGE/Cora.app"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname Cora -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$RUNNER_TEMP/Cora.dmg"
+          codesign --force --timestamp --sign "$CORA_DEVELOPER_ID_IDENTITY" --keychain "$CORA_SIGN_KEYCHAIN" "$RUNNER_TEMP/Cora.dmg"
+          xcrun notarytool submit "$RUNNER_TEMP/Cora.dmg" "${NOTARY[@]}" --output-format json | tee "$RUNNER_TEMP/notary-dmg.json"
+          accepted "$RUNNER_TEMP/notary-dmg.json"
+          xcrun stapler staple "$RUNNER_TEMP/Cora.dmg"
+          rm -f "$KEY" "$RUNNER_TEMP/notarize.zip"
+          xcrun stapler validate build/Cora.app
+          xcrun stapler validate "$RUNNER_TEMP/Cora.dmg"
+          spctl -a -vvv -t exec build/Cora.app 2>&1 | tee "$RUNNER_TEMP/gatekeeper.txt"
+          spctl -a -vvv -t open --context context:primary-signature "$RUNNER_TEMP/Cora.dmg" 2>&1 | tee -a "$RUNNER_TEMP/gatekeeper.txt"
+          grep -q 'source=Notarized Developer ID' "$RUNNER_TEMP/gatekeeper.txt" || { echo "Gatekeeper does not see a notarized Developer ID"; exit 1; }
+          shasum -a 256 "$RUNNER_TEMP/Cora.dmg"
       - name: Package
         run: ditto -c -k --keepParent build/Cora.app "$RUNNER_TEMP/Cora.zip"
       - uses: actions/upload-artifact@v4
@@ -80,10 +125,24 @@ jobs:
         with:
           name: Cora.app
           path: ${{ runner.temp }}/Cora.zip
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: Cora.dmg
+          path: |
+            ${{ runner.temp }}/Cora.dmg
+            ${{ runner.temp }}/gatekeeper.txt
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/Cora.zip" --title "Cora $GITHUB_REF_NAME" \
-            --notes "macOS 14 or later. Signed with the Cora signing certificate (not notarized): on first launch right-click Cora.app and choose Open."
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/Cora.dmg" "$RUNNER_TEMP/Cora.zip" --title "Cora $GITHUB_REF_NAME" \
+            --notes "macOS 14 or later. Signed with Developer ID and notarized by Apple: open Cora.dmg and drag Cora into Applications."
+
+  # A second, clean Mac: the notarized DMG installed and used as a person would, recorded on screen.
+  video:
+    needs: build
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/e2e-video.yml
+    secrets: inherit

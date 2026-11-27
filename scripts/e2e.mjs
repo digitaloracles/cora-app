@@ -74,7 +74,7 @@ try {
   assert.equal(print.code, 0, print.stderr);
   assert.match(print.stdout, /- Buzz \[idle\] claude\/claude-opus-5-5 today 48\.1k \(1 turns\)/);
   assert.match(print.stdout, /- Ada \[idle\] .* today 20\.5k/);
-  assert.match(print.stdout, /- Claude alice@claude\.test max used by Buzz, Ada/);
+  assert.match(print.stdout, /- Claude alice@claude\.test max used by Ada, Buzz/);
   assert.match(print.stdout, /session: 63% left/);
   assert.match(print.stdout, /weekly: 16% left/);
   const agentLines = print.stdout.split("\n").filter((line) => /^- .+ \[\w+\] .* today /.test(line));
