@@ -18,6 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         status = StatusItemController(spaces: spaces)
         status?.openWindow = { [weak self] id in self?.showWindow(agent: id) }
+        status?.createLocal = { [weak self] in
+            guard let self else { return }
+            spaces.cancelAdding()
+            panel.screen = .createLocal
+            showWindow(agent: nil)
+        }
         local.onConnect = { [weak self] link in self?.spaces.handle(link) }
         spaces.start()
         Task { await local.ensureRunning() }
