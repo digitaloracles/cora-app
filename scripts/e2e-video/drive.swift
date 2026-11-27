@@ -315,11 +315,14 @@ type("Lia")
 pause(0.8)
 press(36)
 log("created the agent Lia from the panel's New agent page")
-func tab(_ title: String) -> AXUIElement {
-    wait("the agent's \(title) tab", timeout: 30) { () -> AXUIElement? in
+/// An agent's tab is a link to #/agent/<id>/<tab>.
+func tab(_ key: String) -> AXUIElement {
+    wait("the agent's \(key) tab", timeout: 30) { () -> AXUIElement? in
         guard let web = webArea() else { return nil }
         return find(web, limit: 20000) { element in
-            ["AXLink", "AXButton", "AXRadioButton", "AXTab"].contains(string(element, kAXRoleAttribute)) && label(element, depth: 1).trimmingCharacters(in: .whitespaces) == title
+            guard string(element, kAXRoleAttribute) == "AXLink" else { return false }
+            let url = (value(element, "AXURL") as? URL)?.absoluteString ?? (value(element, "AXURL") as? String) ?? ""
+            return url.contains("#/agent/") && url.hasSuffix("/\(key)")
         }
     }
 }
@@ -327,7 +330,7 @@ pause(1.5)
 shot("agent-created")
 
 // The model and its key go where a person puts them: the agent's Brain tab.
-reveal(tab("Cervello"), "Cervello")
+reveal(tab("cervello"), "Cervello")
 pause(2)
 let harness = wait("the Harness menu", timeout: 30) { () -> AXUIElement? in
     guard let web = webArea() else { return nil }
@@ -355,7 +358,7 @@ shot("brain-key")
 func webButton(_ text: String) -> AXUIElement {
     wait("the button \(text)", timeout: 20) { () -> AXUIElement? in
         guard let web = webArea() else { return nil }
-        return find(web, limit: 20000) { string($0, kAXRoleAttribute) == "AXButton" && label($0).hasPrefix(text) }
+        return find(web, limit: 20000) { string($0, kAXRoleAttribute) == "AXButton" && label($0).contains(text) }
     }
 }
 reveal(webButton("Aggiungi la tua chiave"), "Aggiungi la tua chiave")
@@ -369,7 +372,7 @@ let agentModel = run("/Applications/Cora.app/Contents/MacOS/cora-node", ["--no-w
 log("agents in the space's database: \(agentModel)")
 guard agentModel.contains("deepseek") else { fail("the agent did not take DeepSeek from its Brain tab") }
 
-reveal(tab("Chat"), "Chat")
+reveal(tab("chat"), "Chat")
 pause(2)
 var box: AXUIElement?
 let looking = Date().addingTimeInterval(30)
