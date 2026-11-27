@@ -4,6 +4,7 @@ import SwiftUI
 /// The spaces this iPhone reads, adding one, and signing this iPhone out of one.
 struct SpacesView: View {
     @ObservedObject var spaces: Spaces
+    var didSelect: () -> Void
     @State private var adding = false
     @State private var leaving: SpaceStore?
 
@@ -11,7 +12,7 @@ struct SpacesView: View {
         List {
             Section {
                 ForEach(spaces.stores) { store in
-                    Button { spaces.selected = store.id } label: {
+                    Button { spaces.selected = store.id; didSelect() } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(store.title).font(.body.weight(.semibold)).foregroundStyle(.primary)
@@ -20,16 +21,18 @@ struct SpacesView: View {
                             Spacer()
                             if store.id == spaces.current?.id { Image(systemName: "checkmark").foregroundStyle(.tint) }
                         }
+                        .contentShape(Rectangle())
                     }
+                    .accessibilityIdentifier("choose-space-" + store.id.absoluteString)
                     .buttonStyle(.plain)
                     .swipeActions {
                         Button(role: .destructive) { leaving = store } label: { Label("Disconnect", systemImage: "link.badge.minus") }
                     }
                 }
             } footer: {
-                Text("You can follow work, answer questions and close plans you manage.")
+                Text("The panel uses your account’s permissions.")
             }
-            Section { Button { adding = true } label: { Label("Add a space", systemImage: "plus") } }
+            Section { Button { spaces.address = ""; adding = true } label: { Label("Add a space", systemImage: "plus") } }
             if let current = spaces.current {
                 Section {
                     Button(role: .destructive) { leaving = current } label: { Label(String(localized: "Disconnect this iPhone from \(current.title)"), systemImage: "link.badge.minus") }
@@ -62,7 +65,7 @@ struct ConnectView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Image("Mark").resizable().scaledToFit().frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                     Text("Connect a Cora space").font(.title3.weight(.semibold))
-                    Text("Sign in to the panel of your space and authorize this iPhone: you will see your agents, their quotas and what they are doing now.")
+                    Text("Sign in to your space and authorize this iPhone to open its panel.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 6)
@@ -85,7 +88,7 @@ struct ConnectView: View {
                 .disabled(busy)
                 if let line = statusLine { Text(line.text).font(.footnote).foregroundStyle(line.error ? Color.red : Color.secondary) }
             } footer: {
-                Text("You can follow work, answer questions and close plans you manage.")
+                Text("The panel uses your account’s permissions.")
             }
         }
         .onChange(of: spaces.stores.count) { _, _ in done() }

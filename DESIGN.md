@@ -80,3 +80,5 @@ English with Italian localization. Sentence case, short, no exclamation marks. C
 - **Live dot** (`LiveDot`): the green state dot pulses (opacity 1 ↔ 0.3, 0.8 s) while an agent works; still otherwise.
 - **Live line** (`LiveNowLine`): in thread and plan rows, in place of the last reasoning: pulsing dot 7, «Buzz sta lavorando» footnote semibold green, elapsed time caption2 secondary; under it the step the agent is on, footnote secondary, italic for thinking, two lines at most.
 - **Thread and plan details**: each running turn in its own section (in a thread before the finished turns, in a plan after the checklist) headed by the live dot, «<agent> sta lavorando» and the elapsed time, steps newest first as they arrive; the finished turns follow and are read again whenever a turn starts or ends.
+
+- **iPhone Space tab**: the selected space’s panel fills the first tab. Only its own navigation appears at the bottom. A compact header switches spaces, opens Spaces management, and returns to the app tabs using the trailing close button.

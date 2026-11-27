@@ -97,3 +97,13 @@
 "Close this plan?" = "Chiudere questo piano?";
 "Confirm closure" = "Conferma chiusura";
 "You can follow work, answer questions and close plans you manage." = "Puoi seguire il lavoro, rispondere alle domande e chiudere i piani che gestisci.";
+
+"Close space panel" = "Chiudi il pannello dello spazio";
+"Space unavailable" = "Spazio non disponibile";
+"Open this space" = "Apri questo spazio";
+"Authorize the panel with the account you use in Spaces." = "Autorizza il pannello con l’account che usi in Spazi.";
+"Authorize this iPhone" = "Autorizza questo iPhone";
+"A space needs a secure HTTPS address." = "Lo spazio richiede un indirizzo HTTPS sicuro.";
+"Done" = "Fine";
+"Sign in to your space and authorize this iPhone to open its panel." = "Accedi al tuo spazio e autorizza questo iPhone ad aprire il pannello.";
+"The panel uses your account’s permissions." = "Il pannello usa i permessi del tuo account.";
