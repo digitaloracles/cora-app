@@ -11,6 +11,7 @@ final class StatusItemController: NSObject {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     let popover = NSPopover()
     var openWindow: (String?) -> Void = { _ in }
+    var createLocal: () -> Void = {}
     private var observation: AnyCancellable?
 
     init(spaces: Spaces) {
@@ -20,6 +21,9 @@ final class StatusItemController: NSObject {
         let controller = NSHostingController(rootView: SpacesPopover(spaces: spaces, openAgent: { [weak self] id in
             self?.popover.performClose(nil)
             self?.openWindow(id)
+        }, createLocal: { [weak self] in
+            self?.popover.performClose(nil)
+            self?.createLocal()
         }))
         controller.sizingOptions = [.preferredContentSize]
         popover.contentViewController = controller

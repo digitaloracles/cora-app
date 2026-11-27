@@ -23,6 +23,8 @@ struct PopoverView: View {
     /// The other spaces of this Mac: the switcher under the header, and "Add another space" in the menu.
     var spaces: Spaces? = nil
     var openAgent: (String?) -> Void = { _ in }
+    /// Opens the window on the creation of the space on this Mac, offered while this Mac has none.
+    var createLocal: (() -> Void)? = nil
     @State var tab: PopoverTab = .agents
     @State var threadQuery = ""
     @State var planQuery = ""
@@ -62,7 +64,8 @@ struct PopoverView: View {
                     .padding(10)
                 }
             } else {
-                ConnectPanel(store: store, cancel: spaces?.adding === store ? { spaces?.cancelAdding() } : nil).padding(16)
+                ConnectPanel(store: store, cancel: spaces?.adding === store ? { spaces?.cancelAdding() } : nil,
+                             createLocal: spaces?.hasLocal == true ? nil : createLocal).padding(16)
             }
         }
         .frame(width: 360)
@@ -243,6 +246,8 @@ struct ConnectPanel: View {
     @ObservedObject var store: SpaceStore
     /// Set while adding one more space: goes back to the spaces already connected.
     var cancel: (() -> Void)? = nil
+    /// Set while this Mac has no space of its own: the other way to add one.
+    var createLocal: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -269,6 +274,13 @@ struct ConnectPanel: View {
                 Label(message, systemImage: "exclamationmark.triangle").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             Text("You can follow work, answer questions and close plans you manage.").font(.system(size: 10)).foregroundStyle(.tertiary)
+            if let createLocal {
+                Divider().padding(.vertical, 2)
+                Text("Or run a space on this Mac: Cora prepares it here, with the agents' computers, and only this Mac reaches it.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Button(String(localized: "Create a space on this Mac…"), action: createLocal).controlSize(.small)
+                    .accessibilityIdentifier("popover-create-local")
+            }
         }
     }
 }
@@ -385,9 +397,10 @@ private struct ContentHeight: PreferenceKey {
 struct SpacesPopover: View {
     @ObservedObject var spaces: Spaces
     var openAgent: (String?) -> Void = { _ in }
+    var createLocal: (() -> Void)? = nil
 
     var body: some View {
-        PopoverView(store: spaces.current, spaces: spaces, openAgent: openAgent).id(ObjectIdentifier(spaces.current))
+        PopoverView(store: spaces.current, spaces: spaces, openAgent: openAgent, createLocal: createLocal).id(ObjectIdentifier(spaces.current))
     }
 }
 
