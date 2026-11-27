@@ -187,7 +187,7 @@ final class LocalSpaceController: ObservableObject {
         let label = Self.boxHash()
         let current = try await capture(Self.docker, ["image", "inspect", LocalSpace.boxImage, "--format", "{{index .Config.Labels \"cora.box\"}}"], environment: dockerEnvironment)
         if current.code == 0, current.output.trimmingCharacters(in: .whitespacesAndNewlines) == label { return }
-        let code = try await run(Self.docker, ["build", "--progress", "plain", "--label", "cora.box=\(label)", "-t", LocalSpace.boxImage, Self.box.path], environment: dockerEnvironment)
+        let code = try await run(Self.docker, ["build", "--label", "cora.box=\(label)", "-t", LocalSpace.boxImage, Self.box.path], environment: dockerEnvironment)
         guard code == 0 else { throw Problem.computer(activity.isEmpty ? "docker build \(code)" : activity) }
     }
 
