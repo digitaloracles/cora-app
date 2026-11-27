@@ -94,7 +94,7 @@ final class LocalSpaceController: ObservableObject {
     static var docker: URL { tools.appendingPathComponent("docker") }
     static var box: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/cora-server/box") }
     static var bundled: Bool {
-        [node, colima, docker, tools.appendingPathComponent("limactl")].allSatisfy { FileManager.default.isExecutableFile(atPath: $0.path) } && FileManager.default.fileExists(atPath: main.path)
+        [node, colima, docker, tools.appendingPathComponent("limactl"), tools.appendingPathComponent("lima")].allSatisfy { FileManager.default.isExecutableFile(atPath: $0.path) } && FileManager.default.fileExists(atPath: main.path)
     }
 
     /// Runs every step in order and stops at the first that fails; a second run skips what is already in place.

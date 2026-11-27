@@ -79,6 +79,8 @@ if [[ -n "${CORA_SERVER_SRC:-}" ]]; then
   done
   lipo -create "$VM_CACHE/arm64/colima" "$VM_CACHE/x86_64/colima" -output "$VM/bin/colima"
   lipo -create "$VM_CACHE/arm64/lima/bin/limactl" "$VM_CACHE/x86_64/lima/bin/limactl" -output "$VM/bin/limactl"
+  # Colima checks for Lima by its `lima` script, which only calls limactl.
+  cp "$VM_CACHE/arm64/lima/bin/lima" "$VM/bin/lima"
   lipo -create "$VM_CACHE/arm64/docker/docker" "$VM_CACHE/x86_64/docker/docker" -output "$VM/bin/docker"
   chmod 755 "$VM/bin/"*
   # Linux guests only: each architecture's guest agent and Lima's templates.
