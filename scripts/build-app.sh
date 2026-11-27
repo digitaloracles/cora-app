@@ -54,10 +54,10 @@ if [[ -n "${CORA_SERVER_SRC:-}" ]]; then
     for (const [path, entry] of Object.entries(lock.packages || {}))
       if (entry.os?.includes("darwin") && !entry.dev && !require("fs").existsSync(process.argv[1] + "/" + path))
         console.log(path.replace(/^.*node_modules\//, "") + "@" + entry.version + " " + path);
-  ' "$SERVER" | while read -r spec path; do
+  ' "$SERVER" | while read -r spec dest; do
     pack=$(mktemp -d)
     PATH="$NODE_CACHE/arm64/bin:$PATH" npm pack "$spec" --pack-destination "$pack" --loglevel error >/dev/null
-    mkdir -p "$SERVER/$path" && tar -xzf "$pack"/*.tgz -C "$SERVER/$path" --strip-components 1
+    mkdir -p "$SERVER/$dest" && tar -xzf "$pack"/*.tgz -C "$SERVER/$dest" --strip-components 1
     rm -rf "$pack"
     echo "Added $spec for the other architecture"
   done
