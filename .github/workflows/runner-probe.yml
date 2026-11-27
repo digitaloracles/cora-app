@@ -1,0 +1,29 @@
+name: Runner probe
+on:
+  push:
+    branches: ["buzz/not120-runner-probe"]
+jobs:
+  probe:
+    runs-on: macos-15
+    steps:
+      - name: Screen and input permissions
+        run: |
+          sw_vers; uname -m; system_profiler SPDisplaysDataType | grep -E "Resolution|Display Type" || true
+          mkdir -p out
+          screencapture -x out/shot.png && ls -la out/shot.png
+          (screencapture -v -V 4 -x out/rec.mov && ls -la out/rec.mov) || echo "video capture failed"
+          cat > ax.swift <<"S"
+          import ApplicationServices
+          import CoreGraphics
+          print("AXIsProcessTrusted", AXIsProcessTrusted())
+          print("CGPreflightScreenCaptureAccess", CGPreflightScreenCaptureAccess())
+          print("CGPreflightPostEventAccess", CGPreflightPostEventAccess())
+          S
+          swift ax.swift || true
+          osascript -e "tell application \"System Events\" to get name of every process whose background only is false" || echo "system events denied"
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "select service, client, auth_value from access where service in (\"kTCCServiceScreenCapture\",\"kTCCServiceAccessibility\",\"kTCCServicePostEvent\")" || true
+          which ffmpeg || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: probe
+          path: out
