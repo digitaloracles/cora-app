@@ -35,12 +35,9 @@ public struct LocalSpace: Sendable {
         return (0..<bytes).map { _ in String(format: "%02x", UInt8.random(in: .min ... .max, using: &generator)) }.joined()
     }
 
-    /// The settings only this Mac knows: the panel password, the session key and the model's key.
-    public static func secrets(deepseekKey: String) -> [String: String] {
-        var values = ["CORA_ADMIN_PASSWORD": secret(bytes: 16), "CORA_SESSION_KEY": secret(bytes: 32)]
-        let key = deepseekKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !key.isEmpty { values["DEEPSEEK_API_KEY"] = key }
-        return values
+    /// The settings only this Mac knows: the panel password and the session key. Models and their keys are set per agent in the panel.
+    public static func secrets() -> [String: String] {
+        ["CORA_ADMIN_PASSWORD": secret(bytes: 16), "CORA_SESSION_KEY": secret(bytes: 32)]
     }
 
     /// `NAME='value'` lines a POSIX shell reads with `set -a; . file`.

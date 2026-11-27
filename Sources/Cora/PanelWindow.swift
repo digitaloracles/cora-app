@@ -301,7 +301,7 @@ struct Welcome: View {
                 .font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 460).padding(.top, 6)
             HStack(alignment: .top, spacing: 14) {
                 ChoiceTile(symbol: "laptopcomputer", title: String(localized: "On this Mac"),
-                           text: String(localized: "Cora installs here and starts with your Mac. The agents run on your DeepSeek key."),
+                           text: String(localized: "Cora installs here and starts with your Mac."),
                            note: String(localized: "Works while the Mac is awake"), identifier: "choice-local") { model.screen = .createLocal }
                 ChoiceTile(symbol: "globe", title: String(localized: "Remote space"),
                            text: String(localized: "Open a space on usecora.space or on your own server, signed in as you are in the browser."),
@@ -347,11 +347,10 @@ struct ChoiceTile: View {
     }
 }
 
-/// The space on this Mac: the key, then every step as it really happens; agents are made afterwards in the panel.
+/// The space on this Mac: installation and setup only, every step as it really happens; agents and their models are made afterwards in the panel.
 struct CreateLocal: View {
     @ObservedObject var model: PanelModel
     @ObservedObject var local: LocalSpaceController
-    @FocusState private var keyFocused: Bool
 
     var started: Bool { local.running || !local.states.isEmpty }
 
@@ -374,30 +373,13 @@ struct CreateLocal: View {
             .padding(.horizontal, 36).padding(.vertical, 30)
             .frame(maxWidth: .infinity)
         }
-        .onAppear { keyFocused = true }
     }
 
     var form: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 12) {
-                GridRow {
-                    Text("DeepSeek key").font(.system(size: 12, weight: .medium)).gridColumnAlignment(.trailing)
-                    VStack(alignment: .leading, spacing: 4) {
-                        SecureField(String(localized: "sk-…"), text: $local.deepseekKey)
-                            .textFieldStyle(.roundedBorder).focused($keyFocused).accessibilityIdentifier("deepseek-key")
-                            .onSubmit(create)
-                        HStack(spacing: 4) {
-                            Text("It stays in this Mac's space, readable only by you.").foregroundStyle(.secondary)
-                            Link(String(localized: "Get a key"), destination: URL(string: "https://platform.deepseek.com/api_keys")!)
-                        }
-                        .font(.system(size: 11))
-                    }
-                }
-                GridRow {
-                    Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
-                    buttons.padding(.top, 4)
-                }
-            }
+            Text("Nothing to set up here: once the space is ready you create your agents in the panel and choose their model there.")
+                .font(.system(size: 13)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            buttons.padding(.top, 4)
             .disabled(local.running)
         }
     }

@@ -423,11 +423,10 @@ import Testing
         #expect(env["CORA_HOME"] == "/tmp/cora-local/home")
     }
 
-    @Test func secretsAreFreshAndSkipAnEmptyKey() {
-        let first = LocalSpace.secrets(deepseekKey: "  ")
-        let second = LocalSpace.secrets(deepseekKey: "sk-x")
-        #expect(first["DEEPSEEK_API_KEY"] == nil)
-        #expect(second["DEEPSEEK_API_KEY"] == "sk-x")
+    @Test func secretsAreFreshAndHoldNoModelKey() {
+        let first = LocalSpace.secrets()
+        let second = LocalSpace.secrets()
+        #expect(Set(first.keys) == ["CORA_ADMIN_PASSWORD", "CORA_SESSION_KEY"])
         #expect(first["CORA_ADMIN_PASSWORD"] != second["CORA_ADMIN_PASSWORD"])
         #expect(first["CORA_SESSION_KEY"]?.count == 64)
     }

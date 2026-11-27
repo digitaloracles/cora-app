@@ -7,7 +7,7 @@ import Foundation
 @MainActor
 final class LocalSpaceController: ObservableObject {
     enum Step: Int, CaseIterable, Identifiable {
-        case folder, engine, server, signIn, model, menuBar
+        case folder, engine, server, signIn, menuBar
         var id: Int { rawValue }
 
         var title: String {
@@ -16,7 +16,6 @@ final class LocalSpaceController: ObservableObject {
             case .engine: String(localized: "Install the agents' engine")
             case .server: String(localized: "Start Cora on this Mac")
             case .signIn: String(localized: "Sign in to the panel")
-            case .model: String(localized: "Use DeepSeek for the agents")
             case .menuBar: String(localized: "Connect the menu bar")
             }
         }
@@ -27,7 +26,6 @@ final class LocalSpaceController: ObservableObject {
             case .engine: String(localized: "DeepSeek Harness, from npm")
             case .server: String(localized: "On 127.0.0.1:4370, again at every login")
             case .signIn: String(localized: "This window opens the panel already signed in")
-            case .model: String(localized: "DeepSeek V4.1 Flash for every new agent")
             case .menuBar: String(localized: "Agents, plans and threads at the top of the screen")
             }
         }
@@ -36,7 +34,7 @@ final class LocalSpaceController: ObservableObject {
     enum State: Equatable { case pending, running, done, failed(String) }
 
     enum Problem: LocalizedError {
-        case notBundled, engine, launch(Int32), timeout, signIn(String), model(String), pairing(String), noKey
+        case notBundled, engine, launch(Int32), timeout, signIn(String), pairing(String)
         var errorDescription: String? {
             switch self {
             case .notBundled: String(localized: "This build of Cora does not contain the server: download it again.")
@@ -44,9 +42,7 @@ final class LocalSpaceController: ObservableObject {
             case .launch(let code): String(localized: "macOS did not start the space (launchctl \(code)).")
             case .timeout: String(localized: "Cora did not answer on 127.0.0.1:4370 within two minutes.")
             case .signIn(let message): String(localized: "The panel refused the sign-in: \(message)")
-            case .model(let message): String(localized: "The space did not take DeepSeek as its model: \(message)")
             case .pairing(let message): String(localized: "The menu bar could not connect: \(message)")
-            case .noKey: String(localized: "Paste a DeepSeek key: the agents of this space run on it.")
             }
         }
     }
@@ -54,7 +50,6 @@ final class LocalSpaceController: ObservableObject {
     @Published private(set) var states: [Step: State] = [:]
     @Published private(set) var activity = ""
     @Published private(set) var running = false
-    @Published var deepseekKey = ""
 
     let space = LocalSpace()
     /// The `cora://connect` link of the new space, for the menu bar.
@@ -84,10 +79,6 @@ final class LocalSpaceController: ObservableObject {
     @discardableResult
     func create() async -> Bool {
         guard !running else { return false }
-        if !exists, deepseekKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            states = [.folder: .failed(Problem.noKey.localizedDescription)]
-            return false
-        }
         running = true
         defer { running = false }
         states = [:]
@@ -115,9 +106,8 @@ final class LocalSpaceController: ObservableObject {
             try files.createDirectory(at: space.bin, withIntermediateDirectories: true)
             linkNode()
             var values = space.readEnv()
-            for (key, value) in LocalSpace.secrets(deepseekKey: deepseekKey) where values[key] == nil || key == "DEEPSEEK_API_KEY" { values[key] = value }
+            for (key, value) in LocalSpace.secrets() where values[key] == nil { values[key] = value }
             try space.writeEnv(values)
-            deepseekKey = ""
             activity = space.root.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
         case .engine:
             if FileManager.default.isExecutableFile(atPath: space.dsh.path) { return }
@@ -128,8 +118,6 @@ final class LocalSpaceController: ObservableObject {
             try await start()
         case .signIn:
             _ = try await signIn()
-        case .model:
-            try await useDeepSeek()
         case .menuBar:
             onConnect(try await pairingLink())
         }
@@ -188,14 +176,6 @@ final class LocalSpaceController: ObservableObject {
         guard !found.isEmpty else { throw Problem.signIn(String(localized: "no session")) }
         cookies = found
         return found
-    }
-
-    /// Agents are made in the panel's New agent page; they run on the space's default model, DeepSeek V4.1 Flash on this space's key.
-    func useDeepSeek() async throws {
-        if cookies.isEmpty { _ = try await signIn() }
-        let (data, response) = try await send("PUT", "api/settings", body: ["defaultModel": "deepseek/deepseek-flash"], cookies: cookies)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw Problem.model(Self.message(data, response)) }
-        activity = "deepseek/deepseek-flash"
     }
 
     /// A pairing the panel issues to the signed-in owner, as the button in the panel does.

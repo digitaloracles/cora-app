@@ -192,6 +192,22 @@ func press(_ key: CGKeyCode, flags: CGEventFlags = []) {
     pause(0.2)
 }
 
+// MARK: The panel, a web page in the window
+
+/// What a web element says: its title, description, value and the text inside it.
+func label(_ element: AXUIElement, depth: Int = 2) -> String {
+    var parts = [string(element, kAXTitleAttribute), string(element, kAXDescriptionAttribute), string(element, kAXValueAttribute)]
+    if depth > 0 { parts += children(element).map { label($0, depth: depth - 1) } }
+    return parts.filter { !$0.isEmpty }.joined(separator: " ")
+}
+
+/// Scrolls the panel until the element is on screen, then clicks it like a person.
+func reveal(_ element: AXUIElement, _ name: String) {
+    AXUIElementPerformAction(element, "AXScrollToVisible" as CFString)
+    pause(0.8)
+    click(element, name)
+}
+
 // MARK: The journey
 
 let bundle = "space.usecora.app"
@@ -254,12 +270,9 @@ shot("welcome")
 click(local, "On this Mac")
 pause(1)
 
-// 3. The DeepSeek key, then the real creation.
-let field = wait("the DeepSeek key field", timeout: 15) { find(cora, identified("deepseek-key")) }
-click(field, "DeepSeek key")
-type(key, every: 12_000)
-pause(0.6)
-shot("key")
+// 3. Nothing to configure: the app installs and prepares the space.
+pause(1.5)
+shot("install")
 let create = wait("Create the space", timeout: 10) { find(cora, identified("create-space")) }
 click(create, "Create the space")
 log("creating the space")
@@ -302,16 +315,61 @@ type("Lia")
 pause(0.8)
 press(36)
 log("created the agent Lia from the panel's New agent page")
-let chatTab = wait("the agent's Chat tab", timeout: 30) { () -> AXUIElement? in
-    guard let web = webArea() else { return nil }
-    return find(web, limit: 20000) { element in
-        ["AXLink", "AXButton", "AXRadioButton"].contains(string(element, kAXRoleAttribute))
-            && ([string(element, kAXTitleAttribute), string(element, kAXDescriptionAttribute)] + children(element).map { string($0, kAXValueAttribute) }).contains("Chat")
+func tab(_ title: String) -> AXUIElement {
+    wait("the agent's \(title) tab", timeout: 30) { () -> AXUIElement? in
+        guard let web = webArea() else { return nil }
+        return find(web, limit: 20000) { element in
+            ["AXLink", "AXButton", "AXRadioButton", "AXTab"].contains(string(element, kAXRoleAttribute)) && label(element, depth: 1).trimmingCharacters(in: .whitespaces) == title
+        }
     }
 }
 pause(1.5)
 shot("agent-created")
-click(chatTab, "Chat")
+
+// The model and its key go where a person puts them: the agent's Brain tab.
+reveal(tab("Cervello"), "Cervello")
+pause(2)
+let harness = wait("the Harness menu", timeout: 30) { () -> AXUIElement? in
+    guard let web = webArea() else { return nil }
+    return find(web, limit: 20000) { string($0, kAXRoleAttribute) == "AXPopUpButton" && label($0).contains("Harness di Cora") }
+}
+shot("brain")
+reveal(harness, "Harness")
+pause(1)
+if let item = find(cora, limit: 20000, { string($0, kAXRoleAttribute) == "AXMenuItem" && string($0, kAXTitleAttribute) == "DeepSeek Harness" }) {
+    click(item, "DeepSeek Harness")
+} else {
+    log("menu item not found by accessibility: choosing it with the keyboard")
+    type("DeepSeek H")
+    press(36)
+}
+pause(1.5)
+let keyField = wait("the API key field", timeout: 20) { () -> AXUIElement? in
+    guard let web = webArea() else { return nil }
+    return find(web, limit: 20000) { ["AXTextField", "AXSecureTextField"].contains(string($0, kAXRoleAttribute)) && string($0, "AXPlaceholderValue").contains("chiave API") }
+}
+reveal(keyField, "DeepSeek Platform key")
+type(key, every: 12_000)
+pause(0.6)
+shot("brain-key")
+func webButton(_ text: String) -> AXUIElement {
+    wait("the button \(text)", timeout: 20) { () -> AXUIElement? in
+        guard let web = webArea() else { return nil }
+        return find(web, limit: 20000) { string($0, kAXRoleAttribute) == "AXButton" && label($0).hasPrefix(text) }
+    }
+}
+reveal(webButton("Aggiungi la tua chiave"), "Aggiungi la tua chiave")
+pause(2.5)
+reveal(webButton("DeepSeek V4.1 Flash"), "DeepSeek V4.1 Flash")
+pause(1)
+reveal(webButton("Salva"), "Salva")
+pause(2.5)
+shot("brain-saved")
+let agentModel = run("/Applications/Cora.app/Contents/MacOS/cora-node", ["--no-warnings", "-e", "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});process.stdout.write(JSON.stringify(db.prepare(\"select json_extract(data,'$.name') name, json_extract(data,'$.model') model, json_extract(data,'$.credentialId') credential from agents\").all()))", NSHomeDirectory() + "/Library/Application Support/Cora/Local/home/cora.db"]).1
+log("agents in the space's database: \(agentModel)")
+guard agentModel.contains("deepseek") else { fail("the agent did not take DeepSeek from its Brain tab") }
+
+reveal(tab("Chat"), "Chat")
 pause(2)
 var box: AXUIElement?
 let looking = Date().addingTimeInterval(30)
