@@ -214,7 +214,7 @@ let bundle = "space.usecora.app"
 let appPath = "/Applications/Cora.app"
 guard let key = ProcessInfo.processInfo.environment["E2E_KEY"], !key.isEmpty else { fail("E2E_KEY is not set") }
 let marker = "dal-mac-\(Int(Date().timeIntervalSince1970))"
-let question = ProcessInfo.processInfo.environment["E2E_QUESTION"] ?? "Ciao Lia! Usa la tua shell: esegui uname -a e cat /etc/debian_version, poi scrivi \(marker) nel file ~/work/\(marker).txt. Dimmi in due frasi cosa hai visto e su quale modello giri."
+let question = ProcessInfo.processInfo.environment["E2E_QUESTION"] ?? "Ciao Lia! Usa la tua shell: esegui uname -a e cat /etc/debian_version, poi scrivi \(marker) nel file ~/work/\(marker).txt. Poi apri https://example.com nel browser del tuo desktop e leggi il titolo della pagina. Dimmi in tre frasi cosa hai visto, il titolo e su quale modello giri."
 log("AX trusted: \(AXIsProcessTrusted())")
 
 // 1. The DMG, as it opens from Downloads: drag Cora into Applications.
@@ -431,6 +431,28 @@ log("inside cora-box-\(agentId) (\(catCode)): \(written.replacingOccurrences(of:
 guard catCode == 0, written.contains(marker) else { fail("the file the agent wrote with its shell is not in its container") }
 let steps = run(node, ["--no-warnings", "-e", "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});const r=db.prepare(\"select model, steps from traces where agent_id=? order by started_at desc limit 1\").get(process.argv[2]);process.stdout.write(r?r.model+' '+r.steps.slice(0,1500):'')", db, agentId]).1
 log("the turn's trace: \(steps)")
+guard steps.contains("open_url") || steps.contains("browser") else { fail("the agent did not use its browser") }
+
+// 4c. Its desktop: Xvfb, the window manager, VNC and noVNC running in the container, Chromium on example.com,
+// and the panel's Desktop tab showing it through the port Lima forwards from the VM.
+let (svCode, services) = run(docker, ["exec", "cora-box-\(agentId)", "sh", "-c", "for p in '[X]vfb' '[x]fce4-session' '[x]11vnc' '[w]ebsockify' '[c]hrom'; do printf '%s ' "$p"; pgrep -c -f "$p" || true; done"])
+log("desktop in cora-box-\(agentId) (\(svCode)): \(services.replacingOccurrences(of: "\n", with: " | "))")
+for line in services.split(separator: "\n") {
+    let parts = line.split(separator: " ")
+    guard parts.count == 2, (Int(parts[1]) ?? 0) > 0 else { fail("\(parts.first ?? "") is not running on the agent's desktop") }
+}
+let (_, published) = run(docker, ["port", "cora-box-\(agentId)", "6080"])
+log("noVNC published on \(published.trimmingCharacters(in: .whitespacesAndNewlines))")
+if let hostPort = published.split(separator: "\n").first?.split(separator: ":").last {
+    let (vncCode, vncPage) = run("/usr/bin/curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:\(hostPort)/vnc.html"])
+    log("noVNC from the Mac: \(vncCode) \(vncPage)")
+    guard vncPage == "200" else { fail("the desktop is not reachable from the Mac") }
+} else {
+    fail("the desktop's port is not published")
+}
+reveal(tab("desktop"), "Desktop")
+pause(12)
+shot("desktop")
 
 // 5. The menu bar, untouched: the same popover, now on the space of this Mac.
 if let bar = value(cora, "AXExtrasMenuBar"), let item = children(bar as! AXUIElement).first {
