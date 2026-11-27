@@ -280,9 +280,10 @@ log("creating the space")
 var lastStep = ""
 var lastActivity = ""
 let ready = Date().addingTimeInterval(3300)
+var spaceReady = false
 while Date() < ready {
-    if find(cora, identified("space-ready")) != nil { shot("created"); break }
-    if find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil { break }
+    if find(cora, identified("space-ready")) != nil { shot("created"); spaceReady = true; break }
+    if find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil { spaceReady = true; break }
     if let again = find(cora, identified("create-space")), [string(again, kAXTitleAttribute), string(again, kAXDescriptionAttribute)].contains(where: { $0 == "Riprova" || $0 == "Try again" }) {
         fail("a step of the creation failed")
     }
@@ -292,7 +293,8 @@ while Date() < ready {
     if !step.isEmpty, step != lastActivity { lastActivity = step; log("wizard: \(step.prefix(140))") }
     pause(0.3)
 }
-guard find(cora, identified("space-ready")) != nil || find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil else { fail("the space was not ready within 55 minutes") }
+// Seen once is enough: the window swaps the wizard for the panel right then, and a second look can fall in between.
+guard spaceReady else { fail("the space was not ready within 55 minutes") }
 log("space ready")
 
 // 4. The panel opens in the window, signed in: a new agent, then a real question to it.
