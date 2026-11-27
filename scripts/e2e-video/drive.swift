@@ -435,7 +435,7 @@ guard steps.contains("open_url") || steps.contains("browser") else { fail("the a
 
 // 4c. Its desktop: Xvfb, the window manager, VNC and noVNC running in the container, Chromium on example.com,
 // and the panel's Desktop tab showing it through the port Lima forwards from the VM.
-let (svCode, services) = run(docker, ["exec", "cora-box-\(agentId)", "sh", "-c", "for p in '[X]vfb' '[x]fce4-session' '[x]11vnc' '[w]ebsockify' '[c]hrom'; do printf '%s ' "$p"; pgrep -c -f "$p" || true; done"])
+let (svCode, services) = run(docker, ["exec", "cora-box-\(agentId)", "sh", "-c", "for p in '[X]vfb' '[x]fce4-session' '[x]11vnc' '[w]ebsockify' '[c]hrom'; do printf '%s ' \"$p\"; pgrep -c -f \"$p\" || true; done"])
 log("desktop in cora-box-\(agentId) (\(svCode)): \(services.replacingOccurrences(of: "\n", with: " | "))")
 for line in services.split(separator: "\n") {
     let parts = line.split(separator: " ")
