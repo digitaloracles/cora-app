@@ -5,8 +5,9 @@ set -euo pipefail
 ROOT="${0:A:h:h}"
 cd "$ROOT"
 
-swift build -c release
-BIN="$(swift build -c release --show-bin-path)"
+# Universal: the app runs on Apple silicon and on Intel Macs.
+swift build -c release --arch arm64 --arch x86_64
+BIN="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
 
 APP="$ROOT/build/Cora.app"
 rm -rf "$APP"
@@ -49,6 +50,43 @@ if [[ -n "${CORA_SERVER_SRC:-}" ]]; then
   PATH="$NODE_CACHE/arm64/bin:$PATH" npm ci --prefix "$SERVER" --omit=dev --no-audit --no-fund --ignore-scripts --loglevel error
   "$APP/Contents/MacOS/cora-node" -e 'console.log("bundled node", process.version, process.arch)'
   echo "Bundled Node $NODE_VERSION and Cora $(cd "$CORA_SERVER_SRC" && git rev-parse --short HEAD 2>/dev/null || echo '?')"
+
+  # The agents' computers: Colima starts one Linux VM (Lima, Apple Virtualization) where each agent's cora-box container
+  # runs, driven by the Docker client. Pinned versions, checked against their published SHA-256, made universal.
+  COLIMA_VERSION="${CORA_COLIMA_VERSION:-v0.10.3}"
+  LIMA_VERSION="${CORA_LIMA_VERSION:-2.3.0}"
+  DOCKER_VERSION="${CORA_DOCKER_VERSION:-29.10.1}"
+  VM_CACHE="$ROOT/build/vm-$COLIMA_VERSION-$LIMA_VERSION-$DOCKER_VERSION"
+  VM="$APP/Contents/Resources/cora-vm"
+  mkdir -p "$VM_CACHE" "$VM/bin" "$VM/share/lima"
+  for arch in arm64 x86_64; do
+    docker_arch=$([[ $arch == arm64 ]] && echo aarch64 || echo x86_64)
+    mkdir -p "$VM_CACHE/$arch"
+    (
+      cd "$VM_CACHE/$arch"
+      [[ -f colima ]] || {
+        curl -fsSL -o colima "https://github.com/abiosoft/colima/releases/download/$COLIMA_VERSION/colima-Darwin-$arch"
+        curl -fsSL "https://github.com/abiosoft/colima/releases/download/$COLIMA_VERSION/colima-Darwin-$arch.sha256sum" | awk '{print $1"  colima"}' | shasum -a 256 -c -
+      }
+      [[ -d lima ]] || {
+        TARBALL="lima-$LIMA_VERSION-Darwin-$arch.tar.gz"
+        curl -fsSL -o "$TARBALL" "https://github.com/lima-vm/lima/releases/download/v$LIMA_VERSION/$TARBALL"
+        curl -fsSL "https://github.com/lima-vm/lima/releases/download/v$LIMA_VERSION/SHA256SUMS" | grep " $TARBALL\$" | shasum -a 256 -c -
+        mkdir lima && tar -xzf "$TARBALL" -C lima
+      }
+      [[ -d docker ]] || curl -fsSL "https://download.docker.com/mac/static/stable/$docker_arch/docker-$DOCKER_VERSION.tgz" | tar -xz
+    )
+  done
+  lipo -create "$VM_CACHE/arm64/colima" "$VM_CACHE/x86_64/colima" -output "$VM/bin/colima"
+  lipo -create "$VM_CACHE/arm64/lima/bin/limactl" "$VM_CACHE/x86_64/lima/bin/limactl" -output "$VM/bin/limactl"
+  lipo -create "$VM_CACHE/arm64/docker/docker" "$VM_CACHE/x86_64/docker/docker" -output "$VM/bin/docker"
+  chmod 755 "$VM/bin/"*
+  # Linux guests only: each architecture's guest agent and Lima's templates.
+  ditto "$VM_CACHE/arm64/lima/share/lima/templates" "$VM/share/lima/templates"
+  cp "$VM_CACHE"/arm64/lima/share/lima/lima-guestagent.Linux-*.gz "$VM_CACHE"/x86_64/lima/share/lima/lima-guestagent.Linux-*.gz "$VM/share/lima/"
+  "$VM/bin/colima" version | head -1
+  "$VM/bin/limactl" --version
+  "$VM/bin/docker" --version
 fi
 
 KEYCHAIN=()
@@ -63,6 +101,11 @@ nested() {
       file -b "$file" | grep -q 'Mach-O' && codesign --force "$@" "$file"
     done
   codesign --force "$@" --entitlements "$entitlements" "$APP/Contents/MacOS/cora-node"
+  local vm="$APP/Contents/Resources/cora-vm/bin"
+  [[ -d "$vm" ]] || return 0
+  codesign --force "$@" "$vm/colima"
+  codesign --force "$@" "$vm/docker"
+  codesign --force "$@" --entitlements "$ROOT/Resources/vm.entitlements" "$vm/limactl"
 }
 
 if [[ -n "${CORA_DEVELOPER_ID_IDENTITY:-}" ]]; then

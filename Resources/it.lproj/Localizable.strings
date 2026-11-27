@@ -141,6 +141,13 @@
 "No finished plan matches your search." = "Nessun piano concluso corrisponde alla ricerca.";
 "Prepare the space's folder" = "Preparo la cartella dello space";
 "Install the agents' engine" = "Installo il motore degli agenti";
+"The first time takes a few minutes: Cora builds the agents' computer on this Mac." = "La prima volta ci vogliono alcuni minuti: Cora prepara su questo Mac il computer degli agenti.";
+"Start the agents' Linux machine" = "Avvio la macchina Linux degli agenti";
+"Build the agents' computer" = "Preparo il computer degli agenti";
+"One virtual machine with Docker, Apple Virtualization" = "Una macchina virtuale con Docker, con la virtualizzazione di Apple";
+"Debian with desktop, browser and shell: one container per agent" = "Debian con desktop, browser e shell: un container per agente";
+"The Linux machine did not start: %@" = "La macchina Linux non si è avviata: %@";
+"The agents' computer was not built: %@" = "Il computer degli agenti non si è preparato: %@";
 "Start Cora on this Mac" = "Avvio Cora su questo Mac";
 "Sign in to the panel" = "Entro nel pannello";
 "Connect the menu bar" = "Collego la barra dei menu";

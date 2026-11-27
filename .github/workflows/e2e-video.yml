@@ -9,8 +9,9 @@ on:
 
 jobs:
   video:
-    runs-on: macos-15
-    timeout-minutes: 25
+    # Intel: GitHub's Apple silicon runners cannot start a VM inside, and the agents' computers live in one.
+    runs-on: macos-15-intel
+    timeout-minutes: 70
     permissions:
       actions: read
       contents: read
@@ -62,6 +63,7 @@ jobs:
           for _ in $(seq 1 60); do kill -0 $REC 2>/dev/null || break; sleep 1; done
           if kill -0 $REC 2>/dev/null; then echo "recorder still running"; kill -INT $REC; sleep 5; else echo "recording saved"; fi
           tail -n 80 "$HOME/Library/Application Support/Cora/Local/cora.log" > out/server-tail.log 2>/dev/null || true
+          tail -n 80 "$HOME/.cora-local/lima/colima-cora/ha.stderr.log" > out/vm-tail.log 2>/dev/null || true
           ls -la out
           exit $CODE
       - name: App quit, space still running

@@ -379,6 +379,8 @@ struct CreateLocal: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Nothing to set up here: once the space is ready you create your agents in the panel and choose their model there.")
                 .font(.system(size: 13)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text("The first time takes a few minutes: Cora builds the agents' computer on this Mac.")
+                .font(.system(size: 12)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
             buttons.padding(.top, 4)
             .disabled(local.running)
         }
@@ -437,6 +439,7 @@ struct StepLine: View {
                     Text(message).font(.system(size: 12)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                 case .running where !activity.isEmpty:
                     Text(verbatim: activity).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        .accessibilityIdentifier("space-activity")
                 default:
                     Text(step.detail).font(.system(size: 12)).foregroundStyle(.secondary)
                 }

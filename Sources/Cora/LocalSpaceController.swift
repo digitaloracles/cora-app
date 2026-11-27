@@ -1,19 +1,30 @@
 import AppKit
 import CoraKit
+import CryptoKit
 import Foundation
 
+private final class OutputBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+    func append(_ chunk: Data) { lock.lock(); data.append(chunk); lock.unlock() }
+    var text: String { lock.lock(); defer { lock.unlock() }; return String(decoding: data, as: UTF8.self) }
+}
+
 /// Creates the space on this Mac and keeps it running. Each step is real work the window shows while it happens:
-/// the folder and its secrets, the agents' engine from npm, the LaunchAgent, the panel's session, the menu bar's link.
+/// the folder and its secrets, the agents' engine from npm, the Linux VM and the agents' computer image, the LaunchAgent,
+/// the panel's session, the menu bar's link.
 @MainActor
 final class LocalSpaceController: ObservableObject {
     enum Step: Int, CaseIterable, Identifiable {
-        case folder, engine, server, signIn, menuBar
+        case folder, engine, machine, computer, server, signIn, menuBar
         var id: Int { rawValue }
 
         var title: String {
             switch self {
             case .folder: String(localized: "Prepare the space's folder")
             case .engine: String(localized: "Install the agents' engine")
+            case .machine: String(localized: "Start the agents' Linux machine")
+            case .computer: String(localized: "Build the agents' computer")
             case .server: String(localized: "Start Cora on this Mac")
             case .signIn: String(localized: "Sign in to the panel")
             case .menuBar: String(localized: "Connect the menu bar")
@@ -24,6 +35,8 @@ final class LocalSpaceController: ObservableObject {
             switch self {
             case .folder: String(localized: "Settings and keys stay in Application Support")
             case .engine: String(localized: "DeepSeek Harness, from npm")
+            case .machine: String(localized: "One virtual machine with Docker, Apple Virtualization")
+            case .computer: String(localized: "Debian with desktop, browser and shell: one container per agent")
             case .server: String(localized: "On 127.0.0.1:4370, again at every login")
             case .signIn: String(localized: "This window opens the panel already signed in")
             case .menuBar: String(localized: "Agents, plans and threads at the top of the screen")
@@ -34,11 +47,13 @@ final class LocalSpaceController: ObservableObject {
     enum State: Equatable { case pending, running, done, failed(String) }
 
     enum Problem: LocalizedError {
-        case notBundled, engine, launch(Int32), timeout, signIn(String), pairing(String)
+        case notBundled, engine, machine(String), computer(String), launch(Int32), timeout, signIn(String), pairing(String)
         var errorDescription: String? {
             switch self {
             case .notBundled: String(localized: "This build of Cora does not contain the server: download it again.")
             case .engine: String(localized: "The agents' engine did not install: check the connection and try again.")
+            case .machine(let line): String(localized: "The Linux machine did not start: \(line)")
+            case .computer(let line): String(localized: "The agents' computer was not built: \(line)")
             case .launch(let code): String(localized: "macOS did not start the space (launchctl \(code)).")
             case .timeout: String(localized: "Cora did not answer on 127.0.0.1:4370 within two minutes.")
             case .signIn(let message): String(localized: "The panel refused the sign-in: \(message)")
@@ -73,7 +88,14 @@ final class LocalSpaceController: ObservableObject {
     static var node: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/cora-node") }
     static var main: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/cora-server/src/main.js") }
     static var npm: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/cora-npm/bin/npm-cli.js") }
-    static var bundled: Bool { FileManager.default.isExecutableFile(atPath: node.path) && FileManager.default.fileExists(atPath: main.path) }
+    /// Colima, Lima and the Docker client the app brings, for the VM where the agents' computers run.
+    static var tools: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/cora-vm/bin") }
+    static var colima: URL { tools.appendingPathComponent("colima") }
+    static var docker: URL { tools.appendingPathComponent("docker") }
+    static var box: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/cora-server/box") }
+    static var bundled: Bool {
+        [node, colima, docker, tools.appendingPathComponent("limactl")].allSatisfy { FileManager.default.isExecutableFile(atPath: $0.path) } && FileManager.default.fileExists(atPath: main.path)
+    }
 
     /// Runs every step in order and stops at the first that fails; a second run skips what is already in place.
     @discardableResult
@@ -114,6 +136,10 @@ final class LocalSpaceController: ObservableObject {
             let code = try await run(Self.node, [Self.npm.path, "install", "--global", "--prefix", space.harness.path, "--no-audit", "--no-fund", "--loglevel", "http", "@deepseek-ai/dsh@latest"],
                                      environment: ["PATH": "\(space.bin.path):/usr/bin:/bin:/usr/sbin:/sbin", "HOME": NSHomeDirectory(), "npm_config_update_notifier": "false"])
             guard code == 0, FileManager.default.isExecutableFile(atPath: space.dsh.path) else { throw Problem.engine }
+        case .machine:
+            try await startMachine()
+        case .computer:
+            try await buildComputer()
         case .server:
             try await start()
         case .signIn:
@@ -123,10 +149,60 @@ final class LocalSpaceController: ObservableObject {
         }
     }
 
+    private var vmEnvironment: [String: String] { space.vmEnvironment(tools: Self.tools) }
+
+    /// Boots the Colima VM (created the first time), registers it to boot again at login and writes its Docker socket for the server.
+    func startMachine() async throws {
+        for directory in [space.colimaHome, space.limaHome, space.dockerConfig] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        }
+        if try await capture(Self.colima, ["status", LocalSpace.vmProfile], environment: vmEnvironment).code != 0 {
+            let code = try await run(Self.colima, LocalSpace.vmStartArguments(), environment: vmEnvironment)
+            guard code == 0 else { throw Problem.machine(lastVMLine() ?? "colima \(code)") }
+        }
+        let status = try await capture(Self.colima, ["status", LocalSpace.vmProfile, "--json"], environment: vmEnvironment)
+        guard status.code == 0,
+              let json = try? JSONSerialization.jsonObject(with: Data(status.output.utf8)) as? [String: Any],
+              let socket = json["docker_socket"] as? String, !socket.isEmpty else { throw Problem.machine(status.output.split(separator: "\n").last.map(String.init) ?? "colima status") }
+        var values = space.readEnv()
+        values["DOCKER_HOST"] = socket.hasPrefix("unix://") ? socket : "unix://\(socket)"
+        try space.writeEnv(values)
+        let docker = try await capture(Self.docker, ["info", "--format", "{{.ServerVersion}} {{.Architecture}}"], environment: dockerEnvironment)
+        guard docker.code == 0 else { throw Problem.machine(docker.output.split(separator: "\n").last.map(String.init) ?? "docker") }
+        activity = "Docker \(docker.output.trimmingCharacters(in: .whitespacesAndNewlines))"
+        let agent = try space.vmLaunchAgent(colima: Self.colima)
+        let file = LocalSpace.vmLaunchAgentFile
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if (try? Data(contentsOf: file)) != agent { try agent.write(to: file, options: .atomic) }
+    }
+
+    private var dockerEnvironment: [String: String] {
+        var values = vmEnvironment
+        values["DOCKER_HOST"] = space.readEnv()["DOCKER_HOST"]
+        return values
+    }
+
+    /// Builds `cora-box` from the Dockerfile the server brings, in the VM, for its own architecture; skipped when the image matches.
+    func buildComputer() async throws {
+        let label = Self.boxHash()
+        let current = try await capture(Self.docker, ["image", "inspect", LocalSpace.boxImage, "--format", "{{index .Config.Labels \"cora.box\"}}"], environment: dockerEnvironment)
+        if current.code == 0, current.output.trimmingCharacters(in: .whitespacesAndNewlines) == label { return }
+        let code = try await run(Self.docker, ["build", "--progress", "plain", "--label", "cora.box=\(label)", "-t", LocalSpace.boxImage, Self.box.path], environment: dockerEnvironment)
+        guard code == 0 else { throw Problem.computer(activity.isEmpty ? "docker build \(code)" : activity) }
+    }
+
+    /// The same label deploy/macos.sh gives the image: the first 16 hex digits of the SHA-256 of box/*, in name order.
+    static func boxHash() -> String {
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: box.path)) ?? []).sorted()
+        var data = Data()
+        for name in names { data.append((try? Data(contentsOf: box.appendingPathComponent(name))) ?? Data()) }
+        return String(SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined().prefix(16))
+    }
+
     /// Starts the LaunchAgent when it is not loaded or points to another copy of the app, then waits for the panel.
     func start() async throws {
         linkNode()
-        let data = try space.launchAgent(node: Self.node, main: Self.main)
+        let data = try space.launchAgent(node: Self.node, main: Self.main, tools: Self.tools)
         let file = LocalSpace.launchAgentFile
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         let domain = "gui/\(getuid())"
@@ -151,9 +227,12 @@ final class LocalSpaceController: ObservableObject {
         throw Problem.timeout
     }
 
-    /// Brings the space back after a restart of the app: nothing to do when it already answers.
+    /// Brings the space back after a restart of the app: the VM first, then the server when it does not answer.
     func ensureRunning() async {
         guard exists, Self.bundled else { return }
+        if (try? await capture(Self.colima, ["status", LocalSpace.vmProfile], environment: vmEnvironment).code) != 0 {
+            _ = try? await run(Self.colima, ["start", LocalSpace.vmProfile, "--activate=false"], environment: vmEnvironment)
+        }
         if await answers() { return }
         try? await start()
     }
@@ -231,13 +310,39 @@ final class LocalSpaceController: ObservableObject {
         return process.terminationStatus
     }
 
-    private func lastLogLine() -> String? {
-        guard let handle = try? FileHandle(forReadingFrom: space.logFile) else { return nil }
+    private func lastVMLine() -> String? { lastLogLine(space.limaHome.appendingPathComponent("colima-\(LocalSpace.vmProfile)/ha.stderr.log")) ?? (activity.isEmpty ? nil : activity) }
+
+    private func lastLogLine(_ file: URL? = nil) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: file ?? space.logFile) else { return nil }
         defer { try? handle.close() }
         let size = (try? handle.seekToEnd()) ?? 0
         try? handle.seek(toOffset: size > 2048 ? size - 2048 : 0)
         let text = String(decoding: handle.readDataToEndOfFile(), as: UTF8.self)
         return text.split(separator: "\n").last.map { String($0.prefix(160)) }
+    }
+
+    /// Runs a helper to the end and returns its output, without showing it.
+    private func capture(_ executable: URL, _ arguments: [String], environment: [String: String]) async throws -> (code: Int32, output: String) {
+        try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = executable
+            process.arguments = arguments
+            process.environment = environment
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+            let buffer = OutputBuffer()
+            pipe.fileHandleForReading.readabilityHandler = { buffer.append($0.availableData) }
+            process.terminationHandler = { finished in
+                pipe.fileHandleForReading.readabilityHandler = nil
+                buffer.append(pipe.fileHandleForReading.readDataToEndOfFile())
+                continuation.resume(returning: (finished.terminationStatus, buffer.text))
+            }
+            do { try process.run() } catch {
+                process.terminationHandler = nil
+                continuation.resume(throwing: error)
+            }
+        }
     }
 
     /// Runs a helper and shows its last line of output as it goes.

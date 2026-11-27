@@ -7,8 +7,8 @@ import Foundation
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "out"
 let started = Date()
 setvbuf(stdout, nil, _IOLBF, 0)
-DispatchQueue.global().asyncAfter(deadline: .now() + 840) {
-    print("FAIL: the journey took more than 14 minutes")
+DispatchQueue.global().asyncAfter(deadline: .now() + 3000) {
+    print("FAIL: the journey took more than 50 minutes")
     exit(3)
 }
 
@@ -213,7 +213,8 @@ func reveal(_ element: AXUIElement, _ name: String) {
 let bundle = "space.usecora.app"
 let appPath = "/Applications/Cora.app"
 guard let key = ProcessInfo.processInfo.environment["E2E_KEY"], !key.isEmpty else { fail("E2E_KEY is not set") }
-let question = ProcessInfo.processInfo.environment["E2E_QUESTION"] ?? "Ciao Lia! Presentati in due frasi e dimmi su quale modello giri."
+let marker = "dal-mac-\(Int(Date().timeIntervalSince1970))"
+let question = ProcessInfo.processInfo.environment["E2E_QUESTION"] ?? "Ciao Lia! Usa la tua shell: esegui uname -a e cat /etc/debian_version, poi scrivi \(marker) nel file ~/work/\(marker).txt. Dimmi in due frasi cosa hai visto e su quale modello giri."
 log("AX trusted: \(AXIsProcessTrusted())")
 
 // 1. The DMG, as it opens from Downloads: drag Cora into Applications.
@@ -277,7 +278,8 @@ let create = wait("Create the space", timeout: 10) { find(cora, identified("crea
 click(create, "Create the space")
 log("creating the space")
 var lastStep = ""
-let ready = Date().addingTimeInterval(420)
+var lastActivity = ""
+let ready = Date().addingTimeInterval(2100)
 while Date() < ready {
     if find(cora, identified("space-ready")) != nil { shot("created"); break }
     if find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil { break }
@@ -286,9 +288,11 @@ while Date() < ready {
     }
     let texts = run("/bin/sh", ["-c", "tail -n 1 \"$HOME/Library/Application Support/Cora/Local/cora.log\" 2>/dev/null"]).1.trimmingCharacters(in: .whitespacesAndNewlines)
     if texts != lastStep, !texts.isEmpty { lastStep = texts; log("server: \(texts.prefix(140))") }
+    let step = (find(cora, { string($0, kAXRoleAttribute) == "AXStaticText" && string($0, "AXIdentifier") == "space-activity" }).map { string($0, kAXValueAttribute) }) ?? ""
+    if !step.isEmpty, step != lastActivity { lastActivity = step; log("wizard: \(step.prefix(140))") }
     pause(0.3)
 }
-guard find(cora, identified("space-ready")) != nil || find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil else { fail("the space was not ready within 7 minutes") }
+guard find(cora, identified("space-ready")) != nil || find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil else { fail("the space was not ready within 35 minutes") }
 log("space ready")
 
 // 4. The panel opens in the window, signed in: a new agent, then a real question to it.
@@ -404,13 +408,29 @@ log("asked: \(question)")
 let db = NSHomeDirectory() + "/Library/Application Support/Cora/Local/home/cora.db"
 let node = appPath + "/Contents/MacOS/cora-node"
 let reader = "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});const r=db.prepare(\"select author_name a, content c from messages where kind='agent' order by id desc limit 1\").get();process.stdout.write(r?JSON.stringify(r):'')"
-let reply = wait("the agent's reply", timeout: 180, every: 2) { () -> String? in
+let reply = wait("the agent's reply", timeout: 480, every: 2) { () -> String? in
     let text = run(node, ["--no-warnings", "-e", reader, db]).1.trimmingCharacters(in: .whitespacesAndNewlines)
     return text.hasPrefix("{") ? text : nil
 }
 log("reply in the space's database: \(reply)")
 pause(5)
 shot("reply")
+
+// 4b. The agent's computer: its own cora-box container in the VM, where its shell really ran.
+let docker = appPath + "/Contents/Resources/cora-vm/bin/docker"
+let env = (try? String(contentsOfFile: NSHomeDirectory() + "/Library/Application Support/Cora/Local/env", encoding: .utf8)) ?? ""
+let host = env.split(separator: "\n").first { $0.hasPrefix("DOCKER_HOST=") }.map { String($0.dropFirst(12)).trimmingCharacters(in: CharacterSet(charactersIn: "'")) } ?? ""
+setenv("DOCKER_HOST", host, 1)
+setenv("DOCKER_CONFIG", NSHomeDirectory() + "/.cora-local/docker", 1)
+let agentId = run(node, ["--no-warnings", "-e", "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});process.stdout.write(db.prepare(\"select id from agents order by position limit 1\").get().id)", db]).1
+let (ps, containers) = run(docker, ["ps", "--format", "{{.Names}} {{.Image}} {{.Status}}"])
+log("containers in the VM (\(ps)): \(containers.replacingOccurrences(of: "\n", with: " | "))")
+guard containers.contains("cora-box-\(agentId)") else { fail("no cora-box container for agent \(agentId)") }
+let (catCode, written) = run(docker, ["exec", "-u", "agent", "cora-box-\(agentId)", "sh", "-c", "cat ~/work/\(marker).txt; echo; uname -m; cat /etc/debian_version"])
+log("inside cora-box-\(agentId) (\(catCode)): \(written.replacingOccurrences(of: "\n", with: " | "))")
+guard catCode == 0, written.contains(marker) else { fail("the file the agent wrote with its shell is not in its container") }
+let steps = run(node, ["--no-warnings", "-e", "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});const r=db.prepare(\"select model, steps from traces where agent_id=? order by started_at desc limit 1\").get(process.argv[2]);process.stdout.write(r?r.model+' '+r.steps.slice(0,1500):'')", db, agentId]).1
+log("the turn's trace: \(steps)")
 
 // 5. The menu bar, untouched: the same popover, now on the space of this Mac.
 if let bar = value(cora, "AXExtrasMenuBar"), let item = children(bar as! AXUIElement).first {

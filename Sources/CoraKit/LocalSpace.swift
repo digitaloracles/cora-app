@@ -9,10 +9,18 @@ public struct LocalSpace: Sendable {
     public static let label = "space.usecora.local"
     public static let server = URL(string: "http://127.0.0.1:\(port)")!
 
-    public let root: URL
+    public static let vmLabel = "space.usecora.vm"
+    /// The Colima profile: one Linux VM where every agent's computer runs as a `cora-box` container.
+    public static let vmProfile = "cora"
+    public static let boxImage = "cora-box:latest"
 
-    public init(root: URL? = nil) {
+    public let root: URL
+    /// Colima, Lima and Docker keep their state here: a short path, because their sockets live in it.
+    public let runtime: URL
+
+    public init(root: URL? = nil, runtime: URL? = nil) {
         self.root = root ?? Storage.home.appendingPathComponent("Local", isDirectory: true)
+        self.runtime = runtime ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cora-local", isDirectory: true)
     }
 
     public var home: URL { root.appendingPathComponent("home", isDirectory: true) }
@@ -21,6 +29,52 @@ public struct LocalSpace: Sendable {
     public var envFile: URL { root.appendingPathComponent("env") }
     public var logFile: URL { root.appendingPathComponent("cora.log") }
     public var dsh: URL { harness.appendingPathComponent("bin/dsh") }
+    public var vmLogFile: URL { root.appendingPathComponent("vm.log") }
+    public var colimaHome: URL { runtime.appendingPathComponent("colima", isDirectory: true) }
+    public var limaHome: URL { runtime.appendingPathComponent("lima", isDirectory: true) }
+    public var dockerConfig: URL { runtime.appendingPathComponent("docker", isDirectory: true) }
+
+    public static var vmLaunchAgentFile: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents/\(vmLabel).plist")
+    }
+
+    /// What Colima, Lima and the Docker client read: their own homes, never the user's ~/.colima or ~/.docker.
+    public func vmEnvironment(tools: URL) -> [String: String] {
+        [
+            "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
+            "COLIMA_HOME": colimaHome.path,
+            "LIMA_HOME": limaHome.path,
+            "DOCKER_CONFIG": dockerConfig.path,
+            "PATH": [tools.path, "/usr/bin", "/bin", "/usr/sbin", "/sbin"].joined(separator: ":"),
+        ]
+    }
+
+    /// The VM's size: half the Mac's cores (2 to 4) and a quarter of its memory (4 to 8 GB), so the Mac stays usable.
+    public static func vmSize(cores: Int = ProcessInfo.processInfo.processorCount, memory: UInt64 = ProcessInfo.processInfo.physicalMemory) -> (cpus: Int, memoryGB: Int, diskGB: Int) {
+        let gigabytes = Int(memory / 1_073_741_824)
+        return (min(4, max(2, cores / 2)), min(8, max(4, gigabytes / 4)), 60)
+    }
+
+    /// `colima start`: the first time it creates the VM with VZ, Apple's own virtualization; afterwards it only boots it.
+    public static func vmStartArguments(cores: Int = ProcessInfo.processInfo.processorCount, memory: UInt64 = ProcessInfo.processInfo.physicalMemory) -> [String] {
+        let size = vmSize(cores: cores, memory: memory)
+        return ["start", vmProfile, "--vm-type", "vz", "--runtime", "docker", "--cpu", String(size.cpus), "--memory", String(size.memoryGB), "--disk", String(size.diskGB), "--activate=false"]
+    }
+
+    /// At every login: boot the VM again, then exit (Lima's own agent keeps it running).
+    public func vmLaunchAgent(colima: URL) throws -> Data {
+        let plist: [String: Any] = [
+            "Label": LocalSpace.vmLabel,
+            "ProgramArguments": [colima.path, "start", LocalSpace.vmProfile, "--activate=false"],
+            "EnvironmentVariables": vmEnvironment(tools: colima.deletingLastPathComponent()),
+            "WorkingDirectory": root.path,
+            "RunAtLoad": true,
+            "ProcessType": "Interactive",
+            "StandardOutPath": vmLogFile.path,
+            "StandardErrorPath": vmLogFile.path,
+        ]
+        return try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    }
 
     /// Created once the settings exist; the server may still be starting.
     public var exists: Bool { FileManager.default.fileExists(atPath: envFile.path) }
@@ -72,23 +126,32 @@ public struct LocalSpace: Sendable {
     }
 
     /// What the server reads besides the secrets: where it lives, where it listens, where the agents' harness is.
-    public func serverEnvironment() -> [String: String] {
-        [
+    public func serverEnvironment(tools: URL? = nil) -> [String: String] {
+        var values = [
             "CORA_HOME": home.path,
             "CORA_LISTEN_HOST": "127.0.0.1",
             "PORT": String(LocalSpace.port),
             "CORA_DSH_BIN": dsh.path,
             "CORA_INSECURE_COOKIES": "1",
-            "PATH": [bin.path, harness.appendingPathComponent("bin").path, "/usr/bin", "/bin", "/usr/sbin", "/sbin"].joined(separator: ":"),
+            "PATH": ([bin.path, harness.appendingPathComponent("bin").path] + (tools.map { [$0.path] } ?? []) + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]).joined(separator: ":"),
         ]
+        // The agents' computers: containers in the VM, reached with the app's Docker client on the VM's socket.
+        if let tools {
+            values["CORA_DOCKER"] = tools.appendingPathComponent("docker").path
+            values["CORA_BOX_IMAGE"] = LocalSpace.boxImage
+            values["DOCKER_CONFIG"] = dockerConfig.path
+            values["COLIMA_HOME"] = colimaHome.path
+            values["LIMA_HOME"] = limaHome.path
+        }
+        return values
     }
 
     /// The LaunchAgent: started at login, restarted if it stops, logs in the space's folder.
-    public func launchAgent(node: URL, main: URL) throws -> Data {
+    public func launchAgent(node: URL, main: URL, tools: URL? = nil) throws -> Data {
         let plist: [String: Any] = [
             "Label": LocalSpace.label,
             "ProgramArguments": ["/bin/sh", "-c", "set -a; . \"$0\"; set +a; exec \"$1\" --disable-warning=ExperimentalWarning \"$2\"", envFile.path, node.path, main.path],
-            "EnvironmentVariables": serverEnvironment(),
+            "EnvironmentVariables": serverEnvironment(tools: tools),
             "WorkingDirectory": root.path,
             "RunAtLoad": true,
             "KeepAlive": true,
