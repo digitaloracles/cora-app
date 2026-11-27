@@ -64,6 +64,14 @@ jobs:
           tail -n 80 "$HOME/Library/Application Support/Cora/Local/cora.log" > out/server-tail.log 2>/dev/null || true
           ls -la out
           exit $CODE
+      - name: App quit, space still running
+        run: |
+          osascript -e 'quit app "Cora"' || true
+          for _ in $(seq 1 20); do pgrep -x Cora >/dev/null || break; sleep 1; done
+          pgrep -x Cora >/dev/null && pkill -x Cora || true
+          sleep 2
+          "/Applications/Cora.app/Contents/MacOS/cora-node" --no-warnings scripts/e2e-video/closed.mjs 2>&1 | tee out/closed.log
+          exit ${PIPESTATUS[0]}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
