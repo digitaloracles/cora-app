@@ -49,9 +49,6 @@ final class Spaces: ObservableObject {
         current = store
     }
 
-    /// Whether one of the spaces is the one on this Mac.
-    var hasLocal: Bool { stores.contains { $0.connection.map { Space.isLoopback($0.server) } ?? false } }
-
     func cancelAdding() {
         guard let adding else { return }
         self.adding = nil

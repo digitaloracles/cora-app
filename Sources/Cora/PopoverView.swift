@@ -20,11 +20,9 @@ enum PopoverTab: String, CaseIterable, Identifiable {
 /// the latest reasoning of each thread; Plans with the head of every plan in progress (finished ones are in the window). The popover is as tall as the tab's content and scrolls only past the screen.
 struct PopoverView: View {
     @ObservedObject var store: SpaceStore
-    /// The other spaces of this Mac: the switcher under the header, and "Add another space" in the menu.
+    /// The other spaces of this Mac: the switcher under the header (they are added in the window).
     var spaces: Spaces? = nil
     var openAgent: (String?) -> Void = { _ in }
-    /// Opens the window on the creation of the space on this Mac, offered while this Mac has none.
-    var createLocal: (() -> Void)? = nil
     @State var tab: PopoverTab = .agents
     @State var threadQuery = ""
     @State var planQuery = ""
@@ -64,8 +62,7 @@ struct PopoverView: View {
                     .padding(10)
                 }
             } else {
-                ConnectPanel(store: store, cancel: spaces?.adding === store ? { spaces?.cancelAdding() } : nil,
-                             createLocal: spaces?.hasLocal == true ? nil : createLocal).padding(16)
+                NoSpaceYet(store: store, open: { openAgent(nil) }).padding(16)
             }
         }
         .frame(width: 360)
@@ -178,10 +175,6 @@ struct PopoverView: View {
                     Button(String(localized: "Disconnect this Mac from \(connection.host)")) { Task { await store.disconnect() } }
                     Divider()
                 }
-                if let spaces, !spaces.stores.isEmpty, spaces.adding == nil {
-                    Button(String(localized: "Add another space…")) { spaces.beginAdding() }
-                    Divider()
-                }
                 Button(String(localized: "Quit Cora")) { NSApp.terminate(nil) }
             } label: { Image(systemName: "ellipsis.circle") }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
@@ -241,25 +234,18 @@ struct AgentRow: View {
     }
 }
 
-/// Before a space is connected: the address, then the panel authorizes this Mac.
-struct ConnectPanel: View {
+/// No space in the menu bar yet: spaces are added in the Cora window, on this Mac or remote.
+struct NoSpaceYet: View {
     @ObservedObject var store: SpaceStore
-    /// Set while adding one more space: goes back to the spaces already connected.
-    var cancel: (() -> Void)? = nil
-    /// Set while this Mac has no space of its own: the other way to add one.
-    var createLocal: (() -> Void)? = nil
+    var open: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(cancel == nil ? LocalizedStringKey("Connect your space") : LocalizedStringKey("Add another space")).font(.system(size: 13, weight: .semibold))
-            Text("The panel opens in your browser. Sign in there and authorize this Mac: Cora comes back here on its own.")
+            Text("No space yet").font(.system(size: 13, weight: .semibold))
+            Text("Spaces are added in the Cora window: one on this Mac, or a remote one.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            TextField(String(localized: "Space address"), text: $store.spaceInput, prompt: Text(verbatim: "yourspace.usecora.space"))
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { store.authorize() }
             HStack {
-                Button(String(localized: "Connect")) { store.authorize() }.buttonStyle(.borderedProminent).controlSize(.small)
-                if let cancel { Button(String(localized: "Cancel"), action: cancel).controlSize(.small) }
+                Button(String(localized: "Open Cora"), action: open).buttonStyle(.borderedProminent).controlSize(.small)
                 switch store.phase {
                 case .waitingForPanel(let host):
                     ProgressView().controlSize(.small)
@@ -269,17 +255,6 @@ struct ConnectPanel: View {
                     Text("Connecting…").font(.system(size: 11)).foregroundStyle(.secondary)
                 default: EmptyView()
                 }
-            }
-            if case .failed(let message) = store.phase {
-                Label(message, systemImage: "exclamationmark.triangle").font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            Text("You can follow work, answer questions and close plans you manage.").font(.system(size: 10)).foregroundStyle(.tertiary)
-            if let createLocal {
-                Divider().padding(.vertical, 2)
-                Text("Or run a space on this Mac: Cora prepares it here, with the agents' computers, and only this Mac reaches it.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                Button(String(localized: "Create a space on this Mac…"), action: createLocal).controlSize(.small)
-                    .accessibilityIdentifier("popover-create-local")
             }
         }
     }
@@ -397,14 +372,13 @@ private struct ContentHeight: PreferenceKey {
 struct SpacesPopover: View {
     @ObservedObject var spaces: Spaces
     var openAgent: (String?) -> Void = { _ in }
-    var createLocal: (() -> Void)? = nil
 
     var body: some View {
-        PopoverView(store: spaces.current, spaces: spaces, openAgent: openAgent, createLocal: createLocal).id(ObjectIdentifier(spaces.current))
+        PopoverView(store: spaces.current, spaces: spaces, openAgent: openAgent).id(ObjectIdentifier(spaces.current))
     }
 }
 
-/// One chip per space, with how many agents work there now; the last one adds a space.
+/// One chip per space, with how many agents work there now.
 struct SpaceSwitcher: View {
     @ObservedObject var spaces: Spaces
 
@@ -413,11 +387,6 @@ struct SpaceSwitcher: View {
             HStack(spacing: 6) {
                 ForEach(Array(spaces.stores.enumerated()), id: \.offset) { chip($0.element) }
                 if let adding = spaces.adding { chip(adding) }
-                else {
-                    Button { spaces.beginAdding() } label: { Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).frame(width: 22, height: 22) }
-                        .buttonStyle(.plain).background(Capsule().strokeBorder(Color.primary.opacity(0.15)))
-                        .help(String(localized: "Add another space…"))
-                }
             }
         }
     }
