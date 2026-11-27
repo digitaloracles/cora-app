@@ -42,15 +42,20 @@ jobs:
           swiftc -O scripts/e2e-video/drive.swift -o "$RUNNER_TEMP/drive"
           xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" dmg/Cora.dmg
           hdiutil attach dmg/Cora.dmg
-          screencapture -v -C -V 870 -x out/e2e.mov &
+          # screencapture stops and writes the movie when a key arrives on its input.
+          mkfifo "$RUNNER_TEMP/stop"
+          screencapture -v -C -V 870 -x out/e2e.mov < "$RUNNER_TEMP/stop" &
           REC=$!
+          exec 3> "$RUNNER_TEMP/stop"
           sleep 2
           set +e
           "$RUNNER_TEMP/drive" out 2>&1 | tee out/drive.log
           CODE=${PIPESTATUS[0]}
           set -e
-          kill -INT $REC || true
-          for _ in $(seq 1 30); do kill -0 $REC 2>/dev/null || break; sleep 1; done
+          echo q >&3 || true
+          exec 3>&-
+          for _ in $(seq 1 60); do kill -0 $REC 2>/dev/null || break; sleep 1; done
+          if kill -0 $REC 2>/dev/null; then echo "screencapture still running"; else echo "recording saved"; fi
           tail -n 80 "$HOME/Library/Application Support/Cora/Local/cora.log" > out/server-tail.log 2>/dev/null || true
           ls -la out
           exit $CODE

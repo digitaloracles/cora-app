@@ -307,6 +307,7 @@ struct Welcome: View {
                            text: String(localized: "Open a space on usecora.space or on your own server, signed in as you are in the browser."),
                            note: String(localized: "Agents keep working when the Mac is off"), identifier: "choice-remote") { model.beginRemote() }
             }
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: 600).padding(.top, 26)
             Spacer(minLength: 24)
         }
@@ -397,18 +398,24 @@ struct CreateLocal: View {
                     TextField(String(localized: "Name"), text: $local.agentName).textFieldStyle(.roundedBorder).frame(maxWidth: 220).accessibilityIdentifier("agent-name")
                         .onSubmit(create)
                 }
+                GridRow {
+                    Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                    buttons.padding(.top, 4)
+                }
             }
             .disabled(local.running)
-            HStack(spacing: 10) {
-                Color.clear.frame(width: 1, height: 1)
-                Button(action: create) {
-                    Text(local.failure == nil ? String(localized: "Create the space") : String(localized: "Try again")).frame(minWidth: 120)
-                }
-                .buttonStyle(.borderedProminent).tint(HeatPalette.amber).controlSize(.large)
-                .keyboardShortcut(.defaultAction).disabled(local.running).accessibilityIdentifier("create-space")
-                Button(String(localized: "Back")) { model.screen = model.target == nil ? .welcome : .panel }
-                    .controlSize(.large).disabled(local.running)
+        }
+    }
+
+    var buttons: some View {
+        HStack(spacing: 10) {
+            Button(action: create) {
+                Text(local.failure == nil ? String(localized: "Create the space") : String(localized: "Try again")).frame(minWidth: 120)
             }
+            .buttonStyle(.borderedProminent).tint(HeatPalette.amber).controlSize(.large)
+            .keyboardShortcut(.defaultAction).disabled(local.running).accessibilityIdentifier("create-space")
+            Button(String(localized: "Back")) { model.screen = model.target == nil ? .welcome : .panel }
+                .controlSize(.large).disabled(local.running)
         }
     }
 

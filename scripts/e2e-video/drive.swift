@@ -266,16 +266,16 @@ log("creating the space")
 var lastStep = ""
 let ready = Date().addingTimeInterval(420)
 while Date() < ready {
-    if find(cora, identified("space-ready")) != nil { break }
+    if find(cora, identified("space-ready")) != nil { shot("created"); break }
+    if find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil { break }
     if let again = find(cora, identified("create-space")), [string(again, kAXTitleAttribute), string(again, kAXDescriptionAttribute)].contains(where: { $0 == "Riprova" || $0 == "Try again" }) {
         fail("a step of the creation failed")
     }
     let texts = run("/bin/sh", ["-c", "tail -n 1 \"$HOME/Library/Application Support/Cora/Local/cora.log\" 2>/dev/null"]).1.trimmingCharacters(in: .whitespacesAndNewlines)
     if texts != lastStep, !texts.isEmpty { lastStep = texts; log("server: \(texts.prefix(140))") }
-    pause(1)
+    pause(0.3)
 }
-guard find(cora, identified("space-ready")) != nil else { fail("the space was not ready within 7 minutes") }
-shot("created")
+guard find(cora, identified("space-ready")) != nil || find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil else { fail("the space was not ready within 7 minutes") }
 log("space ready")
 
 // 4. The panel opens in the window, signed in, on the first agent's chat: a real question to a real agent.

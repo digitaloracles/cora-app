@@ -48,9 +48,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: PanelWindowView(model: panel))
-            window.setFrameAutosaveName("CoraPanelWindow")
+            let hosting = NSHostingController(rootView: PanelWindowView(model: panel))
+            // The window keeps its own size: SwiftUI only sets the minimum.
+            hosting.sizingOptions = [.minSize]
+            window.contentViewController = hosting
+            window.setContentSize(size)
             if !window.setFrameUsingName("CoraPanelWindow") { window.center() }
+            window.setFrameAutosaveName("CoraPanelWindow")
             self.window = window
             NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
                 Task { @MainActor in NSApp.setActivationPolicy(.accessory) }
