@@ -201,10 +201,17 @@ func label(_ element: AXUIElement, depth: Int = 2) -> String {
     return parts.filter { !$0.isEmpty }.joined(separator: " ")
 }
 
-/// Scrolls the panel until the element is on screen, then clicks it like a person.
+/// Scrolls the panel until the element is on screen, then clicks it like a person. Scrolled into view it can land in
+/// the window's bottom-right corner, under the panel's floating chat button: there it is pressed as an accessibility action.
 func reveal(_ element: AXUIElement, _ name: String) {
     AXUIElementPerformAction(element, "AXScrollToVisible" as CFString)
     pause(0.8)
+    if let rect = frame(element), let window = value(element, kAXWindowAttribute).map({ $0 as! AXUIElement }), let bounds = frame(window),
+       rect.maxY > bounds.maxY - 90, rect.maxX > bounds.maxX - 300 {
+        log("press \(name) (under the chat button at \(Int(rect.midX)),\(Int(rect.midY)))")
+        AXUIElementPerformAction(element, kAXPressAction as CFString)
+        return
+    }
     click(element, name)
 }
 
