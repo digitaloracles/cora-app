@@ -157,7 +157,7 @@ final class PanelModel: ObservableObject {
         Task {
             guard await local.create() else { return }
             try? await Task.sleep(nanoseconds: 900_000_000)
-            show(.local, page: local.agentId.map { "#/agent/\($0)/chat" } ?? "")
+            show(.local, page: "#/new")
         }
     }
 
@@ -347,7 +347,7 @@ struct ChoiceTile: View {
     }
 }
 
-/// The space on this Mac: the key, the first agent's name, then every step as it really happens.
+/// The space on this Mac: the key, then every step as it really happens; agents are made afterwards in the panel.
 struct CreateLocal: View {
     @ObservedObject var model: PanelModel
     @ObservedObject var local: LocalSpaceController
@@ -392,11 +392,6 @@ struct CreateLocal: View {
                         }
                         .font(.system(size: 11))
                     }
-                }
-                GridRow {
-                    Text("First agent").font(.system(size: 12, weight: .medium))
-                    TextField(String(localized: "Name"), text: $local.agentName).textFieldStyle(.roundedBorder).frame(maxWidth: 220).accessibilityIdentifier("agent-name")
-                        .onSubmit(create)
                 }
                 GridRow {
                     Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])

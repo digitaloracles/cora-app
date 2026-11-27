@@ -7,7 +7,7 @@ import Foundation
 @MainActor
 final class LocalSpaceController: ObservableObject {
     enum Step: Int, CaseIterable, Identifiable {
-        case folder, engine, server, signIn, agent, menuBar
+        case folder, engine, server, signIn, model, menuBar
         var id: Int { rawValue }
 
         var title: String {
@@ -16,7 +16,7 @@ final class LocalSpaceController: ObservableObject {
             case .engine: String(localized: "Install the agents' engine")
             case .server: String(localized: "Start Cora on this Mac")
             case .signIn: String(localized: "Sign in to the panel")
-            case .agent: String(localized: "Create the first agent")
+            case .model: String(localized: "Use DeepSeek for the agents")
             case .menuBar: String(localized: "Connect the menu bar")
             }
         }
@@ -27,7 +27,7 @@ final class LocalSpaceController: ObservableObject {
             case .engine: String(localized: "DeepSeek Harness, from npm")
             case .server: String(localized: "On 127.0.0.1:4370, again at every login")
             case .signIn: String(localized: "This window opens the panel already signed in")
-            case .agent: String(localized: "On DeepSeek V4.1 Flash, ready to chat")
+            case .model: String(localized: "DeepSeek V4.1 Flash for every new agent")
             case .menuBar: String(localized: "Agents, plans and threads at the top of the screen")
             }
         }
@@ -36,7 +36,7 @@ final class LocalSpaceController: ObservableObject {
     enum State: Equatable { case pending, running, done, failed(String) }
 
     enum Problem: LocalizedError {
-        case notBundled, engine, launch(Int32), timeout, signIn(String), agent(String), pairing(String), noKey
+        case notBundled, engine, launch(Int32), timeout, signIn(String), model(String), pairing(String), noKey
         var errorDescription: String? {
             switch self {
             case .notBundled: String(localized: "This build of Cora does not contain the server: download it again.")
@@ -44,7 +44,7 @@ final class LocalSpaceController: ObservableObject {
             case .launch(let code): String(localized: "macOS did not start the space (launchctl \(code)).")
             case .timeout: String(localized: "Cora did not answer on 127.0.0.1:4370 within two minutes.")
             case .signIn(let message): String(localized: "The panel refused the sign-in: \(message)")
-            case .agent(let message): String(localized: "The first agent was not created: \(message)")
+            case .model(let message): String(localized: "The space did not take DeepSeek as its model: \(message)")
             case .pairing(let message): String(localized: "The menu bar could not connect: \(message)")
             case .noKey: String(localized: "Paste a DeepSeek key: the agents of this space run on it.")
             }
@@ -55,10 +55,6 @@ final class LocalSpaceController: ObservableObject {
     @Published private(set) var activity = ""
     @Published private(set) var running = false
     @Published var deepseekKey = ""
-    @Published var agentName = "Lia"
-    /// The first agent, once created: the window opens its chat.
-    @Published private(set) var agentId: String? = UserDefaults.standard.string(forKey: LocalSpaceController.agentKey)
-    static let agentKey = "localSpaceAgent"
 
     let space = LocalSpace()
     /// The `cora://connect` link of the new space, for the menu bar.
@@ -132,8 +128,8 @@ final class LocalSpaceController: ObservableObject {
             try await start()
         case .signIn:
             _ = try await signIn()
-        case .agent:
-            if agentId == nil { try await createAgent() }
+        case .model:
+            try await useDeepSeek()
         case .menuBar:
             onConnect(try await pairingLink())
         }
@@ -194,16 +190,12 @@ final class LocalSpaceController: ObservableObject {
         return found
     }
 
-    /// The space's first agent, made as the panel's New agent page makes one: DeepSeek V4.1 Flash on this space's key.
-    func createAgent() async throws {
-        let name = agentName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let body: [String: Any] = ["name": name.isEmpty ? "Lia" : name, "color": "#f2a93b", "enabled": true, "model": "deepseek/deepseek-flash", "tools": false]
-        let (data, response) = try await post("api/agents", body: body, cookies: cookies)
-        guard (response as? HTTPURLResponse)?.statusCode == 201,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let id = json["id"] as? String else { throw Problem.agent(Self.message(data, response)) }
-        agentId = id
-        UserDefaults.standard.set(id, forKey: Self.agentKey)
-        activity = name
+    /// Agents are made in the panel's New agent page; they run on the space's default model, DeepSeek V4.1 Flash on this space's key.
+    func useDeepSeek() async throws {
+        if cookies.isEmpty { _ = try await signIn() }
+        let (data, response) = try await send("PUT", "api/settings", body: ["defaultModel": "deepseek/deepseek-flash"], cookies: cookies)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw Problem.model(Self.message(data, response)) }
+        activity = "deepseek/deepseek-flash"
     }
 
     /// A pairing the panel issues to the signed-in owner, as the button in the panel does.
@@ -219,8 +211,12 @@ final class LocalSpaceController: ObservableObject {
     }
 
     private func post(_ path: String, body: [String: Any], cookies: [HTTPCookie]) async throws -> (Data, URLResponse) {
+        try await send("POST", path, body: body, cookies: cookies)
+    }
+
+    private func send(_ method: String, _ path: String, body: [String: Any], cookies: [HTTPCookie]) async throws -> (Data, URLResponse) {
         var request = URLRequest(url: LocalSpace.server.appendingPathComponent(path))
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.setValue("1", forHTTPHeaderField: "X-Cora")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         for (key, value) in HTTPCookie.requestHeaderFields(with: cookies) { request.setValue(value, forHTTPHeaderField: key) }

@@ -254,7 +254,7 @@ shot("welcome")
 click(local, "On this Mac")
 pause(1)
 
-// 3. The DeepSeek key and the first agent's name, then the real creation.
+// 3. The DeepSeek key, then the real creation.
 let field = wait("the DeepSeek key field", timeout: 15) { find(cora, identified("deepseek-key")) }
 click(field, "DeepSeek key")
 type(key, every: 12_000)
@@ -278,7 +278,7 @@ while Date() < ready {
 guard find(cora, identified("space-ready")) != nil || find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) != nil else { fail("the space was not ready within 7 minutes") }
 log("space ready")
 
-// 4. The panel opens in the window, signed in, on the first agent's chat: a real question to a real agent.
+// 4. The panel opens in the window, signed in: a new agent, then a real question to it.
 func webArea() -> AXUIElement? { find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) }
 func composer(_ web: AXUIElement) -> AXUIElement? {
     find(web, limit: 20000) { element in
@@ -290,6 +290,29 @@ func composer(_ web: AXUIElement) -> AXUIElement? {
 }
 _ = wait("the panel in the window", timeout: 60) { webArea() }
 pause(3)
+
+// The panel opens on its New agent page: the agent is made there, as in any Cora space.
+let nameField = wait("the New agent page's name field", timeout: 40) { () -> AXUIElement? in
+    guard let web = webArea() else { return nil }
+    return find(web, limit: 20000) { string($0, kAXRoleAttribute) == "AXTextField" && string($0, "AXPlaceholderValue").contains("Marta") }
+}
+shot("new-agent")
+click(nameField, "the agent's name")
+type("Lia")
+pause(0.8)
+press(36)
+log("created the agent Lia from the panel's New agent page")
+let chatTab = wait("the agent's Chat tab", timeout: 30) { () -> AXUIElement? in
+    guard let web = webArea() else { return nil }
+    return find(web, limit: 20000) { element in
+        ["AXLink", "AXButton", "AXRadioButton"].contains(string(element, kAXRoleAttribute))
+            && ([string(element, kAXTitleAttribute), string(element, kAXDescriptionAttribute)] + children(element).map { string($0, kAXValueAttribute) }).contains("Chat")
+    }
+}
+pause(1.5)
+shot("agent-created")
+click(chatTab, "Chat")
+pause(2)
 var box: AXUIElement?
 let looking = Date().addingTimeInterval(30)
 while Date() < looking, box == nil {
