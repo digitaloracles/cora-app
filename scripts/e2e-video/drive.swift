@@ -7,6 +7,10 @@ import Foundation
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "out"
 let started = Date()
 setvbuf(stdout, nil, _IOLBF, 0)
+DispatchQueue.global().asyncAfter(deadline: .now() + 840) {
+    print("FAIL: the journey took more than 14 minutes")
+    exit(3)
+}
 
 func log(_ text: String) { print(String(format: "[%6.1fs] ", Date().timeIntervalSince(started)) + text) }
 func pause(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
@@ -82,6 +86,32 @@ func frame(_ element: AXUIElement) -> CGRect? {
 }
 
 func identified(_ id: String) -> (AXUIElement) -> Bool { { string($0, "AXIdentifier") == id } }
+
+/// The smallest element titled one of `names`, windows aside: a Finder icon rather than the window it is in.
+func icon(_ root: AXUIElement, _ names: [String]) -> AXUIElement? {
+    var best: (AXUIElement, CGFloat)?
+    var queue = [root]
+    var seen = 0
+    while !queue.isEmpty && seen < 4000 {
+        let element = queue.removeFirst()
+        seen += 1
+        queue.append(contentsOf: children(element))
+        let titles = [string(element, kAXTitleAttribute), string(element, kAXDescriptionAttribute), string(element, kAXFilenameAttribute)]
+        guard titles.contains(where: names.contains), !["AXWindow", "AXStaticText", "AXMenuItem", "AXMenuBarItem"].contains(string(element, kAXRoleAttribute)),
+              let rect = frame(element), rect.width > 8, rect.width < 220 else { continue }
+        let area = rect.width * rect.height
+        if best == nil || area < best!.1 { best = (element, area) }
+    }
+    return best?.0
+}
+
+/// Starts a program without waiting: `open` waits while macOS asks about an app from the internet.
+func launch(_ path: String, _ arguments: [String]) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: path)
+    process.arguments = arguments
+    try? process.run()
+}
 
 // MARK: Mouse and keyboard
 
@@ -167,34 +197,40 @@ run("/usr/bin/open", [volume])
 pause(3)
 shot("dmg")
 if let finder = application("com.apple.finder") {
-    let icon = find(finder) { string($0, kAXTitleAttribute) == "Cora" || string($0, kAXTitleAttribute) == "Cora.app" }
-    let target = find(finder) { ["Applications", "Applicazioni"].contains(string($0, kAXTitleAttribute)) && string($0, kAXRoleAttribute) != "AXStaticText" && frame($0).map { $0.width < 300 } == true }
-    if let icon, let target, let a = frame(icon), let b = frame(target) {
-        log("drag Cora.app onto Applications")
+    let source = icon(finder, ["Cora", "Cora.app"])
+    let target = icon(finder, ["Applications", "Applicazioni"])
+    if let source, let target, let a = frame(source), let b = frame(target) {
+        log("drag Cora.app (\(Int(a.midX)),\(Int(a.midY)) \(string(source, kAXRoleAttribute))) onto Applications (\(Int(b.midX)),\(Int(b.midY)) \(string(target, kAXRoleAttribute)))")
         drag(from: CGPoint(x: a.midX, y: a.midY), to: CGPoint(x: b.midX, y: b.midY))
     } else {
         log("Finder icons not found by accessibility: copying with ditto")
     }
 }
-let copied = Date().addingTimeInterval(25)
+let copied = Date().addingTimeInterval(40)
 while Date() < copied && !FileManager.default.fileExists(atPath: appPath + "/Contents/MacOS/Cora") { pause(1) }
 pause(4)
-if !FileManager.default.fileExists(atPath: appPath + "/Contents/MacOS/Cora") {
+if FileManager.default.fileExists(atPath: appPath + "/Contents/MacOS/Cora") {
+    log("Cora.app is in Applications, copied by Finder")
+} else {
+    log("Finder did not copy it: ditto")
     run("/usr/bin/ditto", ["\(volume)/Cora.app", appPath])
 }
+shot("installed")
 let (gk, gatekeeper) = run("/usr/sbin/spctl", ["-a", "-vvv", "-t", "exec", appPath])
 log("Gatekeeper (\(gk)): \(gatekeeper.replacingOccurrences(of: "\n", with: " | "))")
-if let finder = application("com.apple.finder"), let window = find(finder, { string($0, kAXRoleAttribute) == "AXWindow" }) {
-    AXUIElementPerformAction(window, "AXRaise" as CFString)
+if let finder = application("com.apple.finder"), let window = find(finder, { string($0, kAXRoleAttribute) == "AXWindow" }),
+   let close = value(window, kAXCloseButtonAttribute) {
+    click(close as! AXUIElement, "close the DMG window")
 }
-run("/usr/bin/osascript", ["-e", "tell application \"Finder\" to close every window"])
 
 // 2. First launch: macOS asks about an app from the internet, then Cora asks where the space runs.
-run("/usr/bin/open", [appPath])
-let opened = Date().addingTimeInterval(20)
+launch("/usr/bin/open", [appPath])
+log("opened Cora from Applications")
+let opened = Date().addingTimeInterval(60)
 while Date() < opened {
     if let agent = application("com.apple.CoreServicesUIAgent"),
        let button = find(agent, { string($0, kAXRoleAttribute) == "AXButton" && ["Apri", "Open"].contains(string($0, kAXTitleAttribute)) }) {
+        pause(2)
         shot("gatekeeper")
         click(button, "Open in the Gatekeeper dialog")
         break
@@ -222,7 +258,9 @@ var lastStep = ""
 let ready = Date().addingTimeInterval(420)
 while Date() < ready {
     if find(cora, identified("space-ready")) != nil { break }
-    if let failed = find(cora, { string($0, kAXRoleAttribute) == "AXStaticText" && string($0, kAXValueAttribute).contains("Riprova") }) { _ = failed }
+    if let again = find(cora, identified("create-space")), [string(again, kAXTitleAttribute), string(again, kAXDescriptionAttribute)].contains(where: { $0 == "Riprova" || $0 == "Try again" }) {
+        fail("a step of the creation failed")
+    }
     let texts = run("/bin/sh", ["-c", "tail -n 1 \"$HOME/Library/Application Support/Cora/Local/cora.log\" 2>/dev/null"]).1.trimmingCharacters(in: .whitespacesAndNewlines)
     if texts != lastStep, !texts.isEmpty { lastStep = texts; log("server: \(texts.prefix(140))") }
     pause(1)

@@ -144,40 +144,5 @@ jobs:
   video:
     needs: build
     if: github.event_name != 'pull_request'
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: Cora.dmg
-          path: dmg
-      - name: Italian Mac
-        run: |
-          defaults write -g AppleLanguages -array it-IT
-          defaults write -g AppleLocale it_IT
-          killall cfprefsd || true
-      - name: Install, create the space and talk to its agent
-        env:
-          E2E_KEY: ${{ secrets.E2E_DEEPSEEK_API_KEY }}
-        run: |
-          mkdir -p out
-          swiftc -O scripts/e2e-video/drive.swift -o "$RUNNER_TEMP/drive"
-          xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" dmg/Cora.dmg
-          hdiutil attach dmg/Cora.dmg
-          screencapture -v -C -V 900 -x out/e2e.mov &
-          REC=$!
-          sleep 2
-          set +e
-          "$RUNNER_TEMP/drive" out 2>&1 | tee out/drive.log
-          CODE=${PIPESTATUS[0]}
-          set -e
-          kill -INT $REC || true
-          for _ in $(seq 1 30); do kill -0 $REC 2>/dev/null || break; sleep 1; done
-          tail -n 80 "$HOME/Library/Application Support/Cora/Local/cora.log" > out/server-tail.log 2>/dev/null || true
-          ls -la out
-          exit $CODE
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: e2e-video
-          path: out
+    uses: ./.github/workflows/e2e-video.yml
+    secrets: inherit

@@ -1,5 +1,7 @@
 import Foundation
 
+#if os(macOS)
+
 /// The space that runs on this Mac: its folder, the server's settings and the LaunchAgent that keeps it running.
 /// The app brings Node and the Cora server inside its bundle; the space's data stays in its own folder.
 public struct LocalSpace: Sendable {
@@ -101,3 +103,4 @@ public struct LocalSpace: Sendable {
         return try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
     }
 }
+#endif

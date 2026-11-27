@@ -404,6 +404,7 @@ import Testing
     }
 }
 
+#if os(macOS)
 @Suite struct LocalSpaceTests {
     @Test func envRoundTripsQuotesAndKeepsKeysOutOfArguments() throws {
         let values = ["CORA_ADMIN_PASSWORD": "a'b c", "DEEPSEEK_API_KEY": "sk-123"]
@@ -431,3 +432,4 @@ import Testing
         #expect(first["CORA_SESSION_KEY"]?.count == 64)
     }
 }
+#endif
