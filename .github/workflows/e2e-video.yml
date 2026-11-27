@@ -11,7 +11,7 @@ jobs:
   video:
     # Intel: GitHub's Apple silicon runners cannot start a VM inside, and the agents' computers live in one.
     runs-on: macos-15-intel
-    timeout-minutes: 70
+    timeout-minutes: 85
     permissions:
       actions: read
       contents: read

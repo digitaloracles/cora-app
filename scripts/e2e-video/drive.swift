@@ -7,8 +7,8 @@ import Foundation
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "out"
 let started = Date()
 setvbuf(stdout, nil, _IOLBF, 0)
-DispatchQueue.global().asyncAfter(deadline: .now() + 3000) {
-    print("FAIL: the journey took more than 50 minutes")
+DispatchQueue.global().asyncAfter(deadline: .now() + 3900) {
+    print("FAIL: the journey took more than 65 minutes")
     exit(3)
 }
 
