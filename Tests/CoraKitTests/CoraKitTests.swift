@@ -451,6 +451,30 @@ import Testing
         #expect(dirs.filter { $0 == "/usr/bin" }.count == 1, "no folder twice")
     }
 
+    @Test func enginesAreTheServersHarnessesAndAreFoundInPathOrder() throws {
+        #expect(AgentEngine.all.map(\.id) == ["claude", "codex", "grok", "deepseek", "hermes"])
+        #expect(AgentEngine.all.map(\.command) == ["claude", "codex", "grok", "dsh", "hermes"])
+        let codex = try #require(AgentEngine.all.first { $0.id == "codex" })
+        #expect(codex.npmArguments(prefix: URL(fileURLWithPath: "/tmp/h")) == ["install", "--global", "--prefix", "/tmp/h", "--no-audit", "--no-fund", "--loglevel", "http", "@openai/codex@latest"])
+        let hermes = try #require(AgentEngine.all.first { $0.id == "hermes" })
+        #expect(hermes.npmArguments(prefix: URL(fileURLWithPath: "/tmp/h")) == nil, "Hermes comes from its own installer")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cora-engines-\(UUID().uuidString)")
+        let first = root.appendingPathComponent("a"), second = root.appendingPathComponent("b")
+        try FileManager.default.createDirectory(at: first.appendingPathComponent("codex"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(codex.locate(in: [first.path, second.path]) == nil, "a folder named like the command is not the command")
+        let file = second.appendingPathComponent("codex")
+        try Data("#!/bin/sh\n".utf8).write(to: file)
+        #expect(codex.locate(in: [first.path, second.path]) == nil, "not executable yet")
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
+        #expect(codex.locate(in: ["relative", first.path, second.path]) == file.path)
+        let space = LocalSpace(root: URL(fileURLWithPath: "/tmp/cora-local"))
+        let env = space.serverEnvironment()
+        #expect(env["CORA_DSH_BIN"] == nil, "dsh is found on the PATH, wherever it is installed")
+        #expect(env["PATH"]?.hasPrefix("/tmp/cora-local/bin:/tmp/cora-local/harness/bin:") == true, "the space's own engines come first")
+    }
+
     @Test func secretsAreFreshAndHoldNoModelKey() {
         let first = LocalSpace.secrets()
         let second = LocalSpace.secrets()

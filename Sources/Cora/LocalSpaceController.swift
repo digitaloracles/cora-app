@@ -11,7 +11,7 @@ private final class OutputBuffer: @unchecked Sendable {
 }
 
 /// Creates the space on this Mac and keeps it running. Each step is real work the window shows while it happens:
-/// the folder and its secrets, the agents' engine from npm, the Linux VM and the agents' computer image, the LaunchAgent,
+/// the folder and its secrets, the agents' engines that are missing, the Linux VM and the agents' computer image, the LaunchAgent,
 /// the panel's session, the menu bar's link.
 @MainActor
 final class LocalSpaceController: ObservableObject {
@@ -22,7 +22,7 @@ final class LocalSpaceController: ObservableObject {
         var title: String {
             switch self {
             case .folder: String(localized: "Prepare the space's folder")
-            case .engine: String(localized: "Install the agents' engine")
+            case .engine: String(localized: "Install the agents' engines")
             case .machine: String(localized: "Start the agents' Linux machine")
             case .computer: String(localized: "Build the agents' computer")
             case .server: String(localized: "Start Cora on this Mac")
@@ -34,7 +34,7 @@ final class LocalSpaceController: ObservableObject {
         var detail: String {
             switch self {
             case .folder: String(localized: "Settings and keys stay in Application Support")
-            case .engine: String(localized: "DeepSeek Harness, from npm")
+            case .engine: String(localized: "Claude Code, Codex, Grok Build, DeepSeek Harness and Hermes, the ones this Mac lacks")
             case .machine: String(localized: "One virtual machine with Docker, Apple Virtualization")
             case .computer: String(localized: "Debian with desktop, browser and shell: one container per agent")
             case .server: String(localized: "On 127.0.0.1:4370, again at every login")
@@ -47,11 +47,11 @@ final class LocalSpaceController: ObservableObject {
     enum State: Equatable { case pending, running, done, failed(String) }
 
     enum Problem: LocalizedError {
-        case notBundled, engine, machine(String), computer(String), launch(Int32), timeout, signIn(String), pairing(String)
+        case notBundled, engines([String]), machine(String), computer(String), launch(Int32), timeout, signIn(String), pairing(String)
         var errorDescription: String? {
             switch self {
             case .notBundled: String(localized: "This build of Cora does not contain the server: download it again.")
-            case .engine: String(localized: "The agents' engine did not install: check the connection and try again.")
+            case .engines(let names): String(localized: "Not installed: \(names.joined(separator: ", ")). Check the connection and try again, or untick them above.")
             case .machine(let line): String(localized: "The Linux machine did not start: \(line)")
             case .computer(let line): String(localized: "The agents' computer was not built: \(line)")
             case .launch(let code): String(localized: "macOS did not start the space (launchctl \(code)).")
@@ -65,6 +65,17 @@ final class LocalSpaceController: ObservableObject {
     @Published private(set) var states: [Step: State] = [:]
     @Published private(set) var activity = ""
     @Published private(set) var running = false
+    /// Every engine and where this Mac has it; nil until `lookForEngines` ran.
+    @Published private(set) var engines: [EngineStatus]?
+    /// The engines to install, by id: every missing one unless the person unticked it.
+    @Published var chosen: Set<String> = []
+    private var offered: Set<String> = []
+
+    struct EngineStatus: Identifiable, Equatable {
+        let engine: AgentEngine
+        let found: String?
+        var id: String { engine.id }
+    }
 
     let space = LocalSpace()
     /// The `cora://connect` link of the new space, for the menu bar.
@@ -97,6 +108,76 @@ final class LocalSpaceController: ObservableObject {
         [node, colima, docker, tools.appendingPathComponent("limactl"), tools.appendingPathComponent("lima")].allSatisfy { FileManager.default.isExecutableFile(atPath: $0.path) } && FileManager.default.fileExists(atPath: main.path)
     }
 
+    /// The folders the server will search: the space's own engines first, then the login shell's PATH.
+    private nonisolated static func engineDirs(_ space: LocalSpace) -> [String] {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var dirs = [space.harnessBin.path]
+        for dir in loginPath() + [home + "/.local/bin"] where !dirs.contains(dir) { dirs.append(dir) }
+        return dirs
+    }
+
+    /// Looks for every engine where the server will look; a missing one is ticked the first time it shows up.
+    func lookForEngines() async {
+        let space = self.space
+        let dirs = await Task.detached { Self.engineDirs(space) }.value
+        let found = AgentEngine.all.map { EngineStatus(engine: $0, found: $0.locate(in: dirs)) }
+        for status in found where status.found == nil && !offered.contains(status.id) {
+            offered.insert(status.id)
+            chosen.insert(status.id)
+        }
+        engines = found
+    }
+
+    func detail(_ step: Step) -> String {
+        guard step == .engine, let engines else { return step.detail }
+        let missing = engines.filter { $0.found == nil && chosen.contains($0.id) }.map(\.engine.product)
+        if !missing.isEmpty { return String(localized: "To install: \(missing.joined(separator: ", "))") }
+        let present = engines.filter { $0.found != nil }.map(\.engine.product)
+        return present.isEmpty ? String(localized: "None chosen") : String(localized: "Already on this Mac: \(present.joined(separator: ", "))")
+    }
+
+    /// Installs the chosen engines that are still missing, one after the other; the ones that fail are named together.
+    private func installEngines() async throws {
+        await lookForEngines()
+        var failed: [String] = []
+        for status in engines ?? [] where status.found == nil && chosen.contains(status.id) {
+            let engine = status.engine
+            activity = String(localized: "Installing \(engine.product)…")
+            let started = Date()
+            let ok = await install(engine)
+            note("engine \(engine.id) \(ok ? "installed" : "failed") in \(Int(Date().timeIntervalSince(started)))s")
+            if !ok { failed.append(engine.product) }
+        }
+        await lookForEngines()
+        let still = (engines ?? []).filter { $0.found == nil && chosen.contains($0.id) }.map(\.engine.product)
+        for name in still where !failed.contains(name) { failed.append(name) }
+        if !failed.isEmpty { throw Problem.engines(failed) }
+    }
+
+    private func install(_ engine: AgentEngine) async -> Bool {
+        let home = NSHomeDirectory()
+        let system = "/usr/bin:/bin:/usr/sbin:/sbin"
+        switch engine.source {
+        case .npm:
+            guard let arguments = engine.npmArguments(prefix: space.harness) else { return false }
+            try? FileManager.default.createDirectory(at: space.harness, withIntermediateDirectories: true)
+            let code = try? await run(Self.node, [Self.npm.path] + arguments, label: engine.product,
+                                      environment: ["PATH": "\(space.bin.path):\(system)", "HOME": home, "npm_config_update_notifier": "false"])
+            return code == 0
+        case .script(let address, let arguments):
+            let file = space.runtime.appendingPathComponent("install-\(engine.id).sh")
+            try? FileManager.default.createDirectory(at: space.runtime, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: file) }
+            guard let fetched = try? await capture(URL(fileURLWithPath: "/usr/bin/curl"), ["-fsSL", "--retry", "3", "-o", file.path, address.absoluteString], environment: ["PATH": system]),
+                  fetched.code == 0 else { return false }
+            let login = await Task.detached { Self.loginPath() }.value
+            let path = (login + [space.bin.path, system]).joined(separator: ":")
+            let code = try? await run(URL(fileURLWithPath: "/bin/bash"), [file.path] + arguments, label: engine.product,
+                                      environment: ["PATH": path, "HOME": home, "TERM": "dumb", "LANG": "en_US.UTF-8"])
+            return code == 0
+        }
+    }
+
     /// Runs every step in order and stops at the first that fails; a second run skips what is already in place.
     @discardableResult
     func create() async -> Bool {
@@ -107,16 +188,33 @@ final class LocalSpaceController: ObservableObject {
         activity = ""
         for step in Step.allCases {
             states[step] = .running
+            let started = Date()
+            note("\(step) started")
             do {
                 try await perform(step)
                 states[step] = .done
                 activity = ""
+                note("\(step) done in \(Int(Date().timeIntervalSince(started)))s")
             } catch {
                 states[step] = .failed(error.localizedDescription)
+                note("\(step) failed after \(Int(Date().timeIntervalSince(started)))s: \(error.localizedDescription)")
                 return false
             }
         }
         return true
+    }
+
+    /// Appends a timestamped line to the space's wizard.log.
+    private func note(_ line: String) {
+        let text = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
+        let file = space.wizardLog
+        if let handle = try? FileHandle(forWritingTo: file) {
+            handle.seekToEndOfFile()
+            handle.write(Data(text.utf8))
+            try? handle.close()
+        } else {
+            try? Data(text.utf8).write(to: file)
+        }
     }
 
     private func perform(_ step: Step) async throws {
@@ -132,10 +230,7 @@ final class LocalSpaceController: ObservableObject {
             try space.writeEnv(values)
             activity = space.root.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
         case .engine:
-            if FileManager.default.isExecutableFile(atPath: space.dsh.path) { return }
-            let code = try await run(Self.node, [Self.npm.path, "install", "--global", "--prefix", space.harness.path, "--no-audit", "--no-fund", "--loglevel", "http", "@deepseek-ai/dsh@latest"],
-                                     environment: ["PATH": "\(space.bin.path):/usr/bin:/bin:/usr/sbin:/sbin", "HOME": NSHomeDirectory(), "npm_config_update_notifier": "false"])
-            guard code == 0, FileManager.default.isExecutableFile(atPath: space.dsh.path) else { throw Problem.engine }
+            try await installEngines()
         case .machine:
             try await startMachine()
         case .computer:
@@ -403,8 +498,8 @@ final class LocalSpaceController: ObservableObject {
         }
     }
 
-    /// Runs a helper and shows its last line of output as it goes.
-    private func run(_ executable: URL, _ arguments: [String], environment: [String: String]) async throws -> Int32 {
+    /// Runs a helper and shows its last line of output as it goes, after `label` when there is one.
+    private func run(_ executable: URL, _ arguments: [String], label: String? = nil, environment: [String: String]) async throws -> Int32 {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
@@ -416,7 +511,7 @@ final class LocalSpaceController: ObservableObject {
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = String(decoding: handle.availableData, as: UTF8.self)
             guard let line = chunk.split(separator: "\n").last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else { return }
-            let text = String(line.prefix(160))
+            let text = String(((label.map { "\($0): " } ?? "") + line).prefix(160))
             Task { @MainActor in self?.activity = text }
         }
         return try await withCheckedThrowingContinuation { continuation in

@@ -9,6 +9,7 @@ On macOS, run `swift test`, build with `scripts/build-app.sh`, and exercise the 
 Test it from the notarized DMG on a clean Mac, not from a development build on a Mac that already has a space: the VM, the image and the LaunchAgents persist across installs. The `video` CI job does this on `macos-15-intel` with an Italian system language, using the `E2E_DEEPSEEK_API_KEY` secret for the agent's key, and keeps the recording, the driver log and the tails of `cora.log` and the VM log as the `e2e-video` artifact. A run passes when:
 
 - the space answers on `127.0.0.1:4370` and the window shows the panel on **New agent**;
+- `claude`, `codex`, `grok`, `dsh` and `hermes` are each found in the space's `harness/bin`, `~/.local/bin` or the login `PATH` and answer `--version` (the driver logs the engines the wizard ticked and where each one ended up);
 - an agent created in the panel saves its model and key in the Brain tab (checked in the database);
 - the agent writes a file with its shell inside its `cora-box` container, opens a page with its browser (`open_url` in its turn), and the panel's Desktop tab shows its desktop;
 - with the app quit the space still answers, and the LaunchAgent restarts a killed server.
