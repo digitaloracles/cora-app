@@ -28,6 +28,8 @@ public struct LocalSpace: Sendable {
     public var bin: URL { root.appendingPathComponent("bin", isDirectory: true) }
     public var envFile: URL { root.appendingPathComponent("env") }
     public var logFile: URL { root.appendingPathComponent("cora.log") }
+    /// One line per wizard step started, finished or failed, with the time: where the creation spent its minutes.
+    public var wizardLog: URL { root.appendingPathComponent("wizard.log") }
     /// Where the space installs the engines that come from npm; first on the server's PATH.
     public var harnessBin: URL { harness.appendingPathComponent("bin", isDirectory: true) }
     public var vmLogFile: URL { root.appendingPathComponent("vm.log") }

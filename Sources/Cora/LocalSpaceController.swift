@@ -143,7 +143,10 @@ final class LocalSpaceController: ObservableObject {
         for status in engines ?? [] where status.found == nil && chosen.contains(status.id) {
             let engine = status.engine
             activity = String(localized: "Installing \(engine.product)…")
-            if !(await install(engine)) { failed.append(engine.product) }
+            let started = Date()
+            let ok = await install(engine)
+            note("engine \(engine.id) \(ok ? "installed" : "failed") in \(Int(Date().timeIntervalSince(started)))s")
+            if !ok { failed.append(engine.product) }
         }
         await lookForEngines()
         let still = (engines ?? []).filter { $0.found == nil && chosen.contains($0.id) }.map(\.engine.product)
@@ -185,16 +188,33 @@ final class LocalSpaceController: ObservableObject {
         activity = ""
         for step in Step.allCases {
             states[step] = .running
+            let started = Date()
+            note("\(step) started")
             do {
                 try await perform(step)
                 states[step] = .done
                 activity = ""
+                note("\(step) done in \(Int(Date().timeIntervalSince(started)))s")
             } catch {
                 states[step] = .failed(error.localizedDescription)
+                note("\(step) failed after \(Int(Date().timeIntervalSince(started)))s: \(error.localizedDescription)")
                 return false
             }
         }
         return true
+    }
+
+    /// Appends a timestamped line to the space's wizard.log.
+    private func note(_ line: String) {
+        let text = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
+        let file = space.wizardLog
+        if let handle = try? FileHandle(forWritingTo: file) {
+            handle.seekToEndOfFile()
+            handle.write(Data(text.utf8))
+            try? handle.close()
+        } else {
+            try? Data(text.utf8).write(to: file)
+        }
     }
 
     private func perform(_ step: Step) async throws {

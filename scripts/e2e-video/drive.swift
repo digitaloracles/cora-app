@@ -35,8 +35,11 @@ func shot(_ name: String) {
     run("/usr/sbin/screencapture", ["-x", "-C", "\(out)/\(String(format: "%02d", shots))-\(name).png"])
 }
 
+var diagnose: (() -> Void)?
+
 func fail(_ text: String) -> Never {
     log("FAIL: \(text)")
+    diagnose?()
     shot("failure")
     exit(1)
 }
@@ -292,6 +295,9 @@ shot("install")
 let create = wait("Create the space", timeout: 10) { find(cora, identified("create-space")) }
 click(create, "Create the space")
 log("creating the space")
+diagnose = {
+    log("wizard.log:\n" + run("/bin/sh", ["-c", "cat \"$HOME/Library/Application Support/Cora/Local/wizard.log\" 2>/dev/null"]).1)
+}
 var lastStep = ""
 var lastActivity = ""
 let ready = Date().addingTimeInterval(3300)
@@ -311,6 +317,7 @@ while Date() < ready {
 // Seen once is enough: the window swaps the wizard for the panel right then, and a second look can fall in between.
 guard spaceReady else { fail("the space was not ready within 55 minutes") }
 log("space ready")
+log("wizard.log:\n" + run("/bin/sh", ["-c", "cat \"$HOME/Library/Application Support/Cora/Local/wizard.log\" 2>/dev/null"]).1)
 
 // Every engine is now where the server looks: the space's own npm prefix, ~/.local/bin (Hermes) or the login PATH.
 let spaceFolder = NSHomeDirectory() + "/Library/Application Support/Cora/Local"
@@ -449,6 +456,13 @@ log("asked: \(question)")
 let db = NSHomeDirectory() + "/Library/Application Support/Cora/Local/home/cora.db"
 let node = appPath + "/Contents/MacOS/cora-node"
 let reader = "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});const r=db.prepare(\"select author_name a, content c from messages where kind='agent' order by id desc limit 1\").get();process.stdout.write(r?JSON.stringify(r):'')"
+let recent = "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});process.stdout.write(JSON.stringify(db.prepare(\"select channel_id ch, kind, author_name a, substr(content,1,160) c, at from messages order by at desc limit 6\").all()))"
+diagnose = {
+    log("last messages: " + run(node, ["--no-warnings", "-e", recent, db]).1)
+    log("cora.log tail:\n" + run("/bin/sh", ["-c", "grep -v 'Time sync' \"$HOME/Library/Application Support/Cora/Local/cora.log\" | grep -iE 'turn|harness|deepseek|dsh|error|warn|lia' | grep -viE 'token|key|secret|password' | tail -n 40"]).1)
+}
+pause(15)
+log("after 15s, last messages: " + run(node, ["--no-warnings", "-e", recent, db]).1)
 let reply = wait("the agent's reply", timeout: 480, every: 2) { () -> String? in
     let text = run(node, ["--no-warnings", "-e", reader, db]).1.trimmingCharacters(in: .whitespacesAndNewlines)
     return text.hasPrefix("{") ? text : nil
