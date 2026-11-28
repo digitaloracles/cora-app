@@ -28,7 +28,8 @@ public struct LocalSpace: Sendable {
     public var bin: URL { root.appendingPathComponent("bin", isDirectory: true) }
     public var envFile: URL { root.appendingPathComponent("env") }
     public var logFile: URL { root.appendingPathComponent("cora.log") }
-    public var dsh: URL { harness.appendingPathComponent("bin/dsh") }
+    /// Where the space installs the engines that come from npm; first on the server's PATH.
+    public var harnessBin: URL { harness.appendingPathComponent("bin", isDirectory: true) }
     public var vmLogFile: URL { root.appendingPathComponent("vm.log") }
     public var colimaHome: URL { runtime.appendingPathComponent("colima", isDirectory: true) }
     public var limaHome: URL { runtime.appendingPathComponent("lima", isDirectory: true) }
@@ -130,7 +131,7 @@ public struct LocalSpace: Sendable {
     /// (Homebrew, ~/.local/bin and the like, where Claude Code, Codex and the other CLIs already are), then the system.
     public func serverPath(tools: URL? = nil, userPath: [String] = []) -> String {
         let system = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
-        var dirs = [bin.path, harness.appendingPathComponent("bin").path] + (tools.map { [$0.path] } ?? [])
+        var dirs = [bin.path, harnessBin.path] + (tools.map { [$0.path] } ?? [])
         for dir in userPath + system where dir.hasPrefix("/") && !dirs.contains(dir) { dirs.append(dir) }
         return dirs.joined(separator: ":")
     }
@@ -140,7 +141,6 @@ public struct LocalSpace: Sendable {
             "CORA_HOME": home.path,
             "CORA_LISTEN_HOST": "127.0.0.1",
             "PORT": String(LocalSpace.port),
-            "CORA_DSH_BIN": dsh.path,
             "CORA_INSECURE_COOKIES": "1",
             "PATH": serverPath(tools: tools, userPath: userPath),
         ]

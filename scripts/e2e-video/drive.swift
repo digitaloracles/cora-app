@@ -278,8 +278,16 @@ shot("welcome")
 click(local, "On this Mac")
 pause(1)
 
-// 3. Nothing to configure: the app installs and prepares the space.
-pause(1.5)
+// 3. The engines this Mac lacks come ticked; the app installs them and prepares the space.
+let listing = Date().addingTimeInterval(20)
+var ticked: [String] = []
+while Date() < listing {
+    ticked = ["claude", "codex", "grok", "deepseek", "hermes"].filter { find(cora, identified("engine-\($0)")) != nil }
+    if !ticked.isEmpty { break }
+    pause(0.5)
+}
+log("engines to install, ticked in the wizard: \(ticked.isEmpty ? "none found by accessibility" : ticked.joined(separator: ", "))")
+pause(1)
 shot("install")
 let create = wait("Create the space", timeout: 10) { find(cora, identified("create-space")) }
 click(create, "Create the space")
@@ -303,6 +311,19 @@ while Date() < ready {
 // Seen once is enough: the window swaps the wizard for the panel right then, and a second look can fall in between.
 guard spaceReady else { fail("the space was not ready within 55 minutes") }
 log("space ready")
+
+// Every engine is now where the server looks: the space's own npm prefix, ~/.local/bin (Hermes) or the login PATH.
+let spaceFolder = NSHomeDirectory() + "/Library/Application Support/Cora/Local"
+let loginDirs = run("/bin/zsh", ["-ilc", "printf '%s' \"$PATH\""]).1.split(separator: ":").map(String.init)
+let engineDirs = [spaceFolder + "/harness/bin", NSHomeDirectory() + "/.local/bin"] + loginDirs
+for command in ["claude", "codex", "grok", "dsh", "hermes"] {
+    var isDir: ObjCBool = false
+    guard let found = engineDirs.map({ $0 + "/" + command }).first(where: { FileManager.default.isExecutableFile(atPath: $0) && FileManager.default.fileExists(atPath: $0, isDirectory: &isDir) && !isDir.boolValue }) else {
+        fail("\(command) is not installed after the wizard")
+    }
+    let version = run(found, ["--version"]).1.split(separator: "\n").first.map(String.init) ?? ""
+    log("engine \(command): \(found.replacingOccurrences(of: NSHomeDirectory(), with: "~")) \(version.prefix(80))")
+}
 
 // 4. The panel opens in the window, signed in: a new agent, then a real question to it.
 func webArea() -> AXUIElement? { find(cora, { string($0, kAXRoleAttribute) == "AXWebArea" }) }

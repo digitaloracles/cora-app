@@ -373,12 +373,14 @@ struct CreateLocal: View {
             .padding(.horizontal, 36).padding(.vertical, 30)
             .frame(maxWidth: .infinity)
         }
+        .task { await local.lookForEngines() }
     }
 
     var form: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Nothing to set up here: once the space is ready you create your agents in the panel and choose their model there.")
+            Text("Cora installs the agents' engines this Mac lacks. Once the space is ready you create your agents in the panel and choose their model there.")
                 .font(.system(size: 13)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            EngineList(local: local).disabled(local.running)
             Text("The first time takes a few minutes: Cora builds the agents' computer on this Mac.")
                 .font(.system(size: 12)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
             buttons.padding(.top, 4)
@@ -406,7 +408,7 @@ struct CreateLocal: View {
     var steps: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(LocalSpaceController.Step.allCases) { step in
-                StepLine(step: step, state: local.state(step), activity: local.state(step) == .running ? local.activity : "",
+                StepLine(step: step, state: local.state(step), detail: local.detail(step), activity: local.state(step) == .running ? local.activity : "",
                          last: step == LocalSpaceController.Step.allCases.last)
             }
             if local.finished {
@@ -418,10 +420,78 @@ struct CreateLocal: View {
     }
 }
 
+/// The engines Cora runs agents with: the ones this Mac has, with where, and a tick to install each missing one.
+struct EngineList: View {
+    @ObservedObject var local: LocalSpaceController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Agents' engines").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            if let engines = local.engines {
+                VStack(spacing: 0) {
+                    ForEach(Array(engines.enumerated()), id: \.element.id) { index, status in
+                        if index > 0 { Divider().padding(.leading, 38) }
+                        EngineRow(status: status, chosen: Binding(
+                            get: { local.chosen.contains(status.id) },
+                            set: { if $0 { local.chosen.insert(status.id) } else { local.chosen.remove(status.id) } }))
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Looking for the engines on this Mac…").font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 6)
+            }
+        }
+        .accessibilityIdentifier("engines")
+    }
+}
+
+struct EngineRow: View {
+    let status: LocalSpaceController.EngineStatus
+    @Binding var chosen: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Group {
+                if ProviderIcon.template(status.engine.id) != nil { ProviderMark(provider: status.engine.id, size: 16) }
+                else { Image(systemName: "terminal").font(.system(size: 13)) }
+            }
+            .frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: status.engine.product).font(.system(size: 13, weight: .semibold))
+                Text(verbatim: note).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            if status.found != nil {
+                Image(systemName: "checkmark.circle.fill").font(.system(size: 15)).foregroundStyle(.green)
+                    .accessibilityLabel(Text("Already on this Mac"))
+            } else {
+                Toggle(String(localized: "Install"), isOn: $chosen).toggleStyle(.checkbox).font(.system(size: 12))
+                    .accessibilityIdentifier("engine-\(status.engine.id)")
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+    }
+
+    var note: String {
+        if let found = status.found {
+            return String(localized: "On this Mac: \(found.replacingOccurrences(of: NSHomeDirectory(), with: "~"))")
+        }
+        switch status.engine.source {
+        case .npm(let package): return String(localized: "Not on this Mac: installs \(package) from npm")
+        case .script: return String(localized: "Not on this Mac: installs with its official installer")
+        }
+    }
+}
+
 /// One step of the creation: a dot on a line, its title and what it does or what is happening now.
 struct StepLine: View {
     let step: LocalSpaceController.Step
     let state: LocalSpaceController.State
+    let detail: String
     let activity: String
     let last: Bool
 
@@ -441,7 +511,7 @@ struct StepLine: View {
                     Text(verbatim: activity).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                         .accessibilityIdentifier("space-activity")
                 default:
-                    Text(step.detail).font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text(verbatim: detail).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(.top, 2).padding(.bottom, last ? 0 : 14)

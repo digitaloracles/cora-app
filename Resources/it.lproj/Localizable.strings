@@ -140,7 +140,7 @@
 "No plan in progress matches your search." = "Nessun piano in corso corrisponde alla ricerca.";
 "No finished plan matches your search." = "Nessun piano concluso corrisponde alla ricerca.";
 "Prepare the space's folder" = "Preparo la cartella dello space";
-"Install the agents' engine" = "Installo il motore degli agenti";
+"Install the agents' engines" = "Installo i motori degli agenti";
 "The first time takes a few minutes: Cora builds the agents' computer on this Mac." = "La prima volta ci vogliono alcuni minuti: Cora prepara su questo Mac il computer degli agenti.";
 "Start the agents' Linux machine" = "Avvio la macchina Linux degli agenti";
 "Build the agents' computer" = "Preparo il computer degli agenti";
@@ -152,12 +152,12 @@
 "Sign in to the panel" = "Entro nel pannello";
 "Connect the menu bar" = "Collego la barra dei menu";
 "Settings and keys stay in Application Support" = "Impostazioni e chiavi restano in Application Support";
-"DeepSeek Harness, from npm" = "DeepSeek Harness, da npm";
+"Claude Code, Codex, Grok Build, DeepSeek Harness and Hermes, the ones this Mac lacks" = "Claude Code, Codex, Grok Build, DeepSeek Harness e Hermes, quelli che mancano su questo Mac";
 "On 127.0.0.1:4370, again at every login" = "Su 127.0.0.1:4370, di nuovo a ogni accesso al Mac";
 "This window opens the panel already signed in" = "Questa finestra apre il pannello con l'accesso già fatto";
 "Agents, plans and threads at the top of the screen" = "Agenti, piani e thread in alto sullo schermo";
 "This build of Cora does not contain the server: download it again." = "Questa build di Cora non contiene il server: scaricala di nuovo.";
-"The agents' engine did not install: check the connection and try again." = "Il motore degli agenti non si è installato: controlla la connessione e riprova.";
+"Not installed: %@. Check the connection and try again, or untick them above." = "Non installati: %@. Controlla la connessione e riprova, oppure togli la spunta qui sopra.";
 "macOS did not start the space (launchctl %d)." = "macOS non ha avviato lo space (launchctl %d).";
 "Cora did not answer on 127.0.0.1:4370 within two minutes." = "Cora non ha risposto su 127.0.0.1:4370 entro due minuti.";
 "The panel refused the sign-in: %@" = "Il pannello ha rifiutato l'accesso: %@";
@@ -178,7 +178,7 @@
 "Agents live in a space: their chats, memory, plans and routines. Keep it on this Mac or connect one you already have." = "Gli agenti vivono in uno space: chat, memoria, piani e routine. Tienilo su questo Mac o collega uno space che hai già.";
 "On this Mac" = "Su questo Mac";
 "Cora installs here and starts with your Mac." = "Cora si installa qui e parte con il Mac.";
-"Nothing to set up here: once the space is ready you create your agents in the panel and choose their model there." = "Qui non c'è niente da configurare: quando lo space è pronto crei gli agenti nel pannello e scegli lì il loro modello.";
+"Cora installs the agents' engines this Mac lacks. Once the space is ready you create your agents in the panel and choose their model there." = "Cora installa i motori degli agenti che mancano su questo Mac. Quando lo space è pronto crei gli agenti nel pannello e scegli lì il loro modello.";
 "Works while the Mac is awake" = "Funziona finché il Mac è acceso";
 "Open a space on usecora.space or on your own server, signed in as you are in the browser." = "Apri uno space su usecora.space o su un tuo server, con lo stesso accesso che usi nel browser.";
 "Agents keep working when the Mac is off" = "Gli agenti lavorano anche a Mac spento";
@@ -195,3 +195,14 @@
 "Open Cora" = "Apri Cora";
 "Downloading the agents' computer: %@" = "Scarico il computer degli agenti: %@";
 "Loading the agents' computer into the VM…" = "Carico il computer degli agenti nella macchina virtuale…";
+"Agents' engines" = "Motori degli agenti";
+"Looking for the engines on this Mac…" = "Cerco i motori su questo Mac…";
+"Already on this Mac" = "Già su questo Mac";
+"Install" = "Installa";
+"On this Mac: %@" = "Su questo Mac: %@";
+"Not on this Mac: installs %@ from npm" = "Non c'è su questo Mac: installa %@ da npm";
+"Not on this Mac: installs with its official installer" = "Non c'è su questo Mac: si installa con il suo installer ufficiale";
+"To install: %@" = "Da installare: %@";
+"Already on this Mac: %@" = "Già su questo Mac: %@";
+"None chosen" = "Nessuno scelto";
+"Installing %@…" = "Installo %@…";
